@@ -60,14 +60,31 @@ fi
 #    which resets on rebuild; the data dir does not). Existing content is
 #    always preserved: new files are merged in, existing files are kept.
 # ---------------------------------------------------------------------------
-link_dir() { # link_dir <real path> <persistent target>
-  local src="$1" dest="$2"
+link_dir() { # link_dir <src> <dest> [preserve_conflicts]
+  local src="$1" dest="$2" preserve="${3:-0}"
   [ -L "$src" ] && return 0                 # already linked
   mkdir -p "$(dirname "$src")" "$(dirname "$dest")"
   if [ -d "$dest" ]; then
-    # Destination already persisted: merge src into it (keep persisted files,
-    # add anything new), then replace src with the link.
-    cp -an "$src"/. "$dest"/ 2>/dev/null || true
+    if [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null)" ]; then
+      if [ "$preserve" = 1 ]; then
+        # Merge for user documents: new files are copied in; files that
+        # exist in both places with different content are kept as
+        # .migrated-<timestamp> copies so nothing is ever lost. If the
+        # merge fails, the source is left untouched (no deletion).
+        ( cd "$src" && find . -type f ! -name '*.migrated-*' | while IFS= read -r f; do
+            if [ -e "$dest/$f" ]; then
+              if ! cmp -s "$src/$f" "$dest/$f"; then
+                cp -a "$src/$f" "$dest/$f.migrated-$(date -u +%Y%m%d-%H%M%S)" || exit 1
+              fi
+            else
+              mkdir -p "$(dirname "$dest/$f")" || exit 1
+              cp -a "$src/$f" "$dest/$f" || exit 1
+            fi
+          done ) || { echo "WARNING: merge into $dest failed; keeping $src untouched" >&2; return 0; }
+      fi
+      # For app configs (preserve=0) the persisted version wins; on rebuild
+      # the source is only the fresh image default, so dropping it is safe.
+    fi
     rm -rf "$src"
   elif [ -d "$src" ]; then
     mv "$src" "$dest"                        # first run: move existing in
@@ -76,7 +93,7 @@ link_dir() { # link_dir <real path> <persistent target>
   ln -sfn "$dest" "$src"
 }
 
-link_dir "$HOMEDIR/Files"                     "$DATA_DIR/files"
+link_dir "$HOMEDIR/Files"                     "$DATA_DIR/files" 1
 link_dir "$HOMEDIR/.config/net.imput.helium"  "$DATA_DIR/private/net.imput.helium"
 link_dir "$HOMEDIR/.config/obs-studio"        "$DATA_DIR/private/obs-studio"
 link_dir "$HOMEDIR/.fluxbox"                  "$DATA_DIR/private/fluxbox"
@@ -105,8 +122,8 @@ if ! git diff --cached --quiet; then
 fi
 # Always attempt the push: retries after earlier failures, even with no
 # new changes, so locally-committed backups reach GitHub eventually.
-# Rebase first so a backup from another codespace does not cause a rejection.
-git pull -q --rebase --autostash origin desktop-data 2>/dev/null || true
+# No automatic rebase/merge: a diverged remote is reported as a failure so
+# documents are never rewritten with conflict markers.
 if git push -q -u origin desktop-data 2>/tmp/desktop-push.err; then
   if [ "$committed" = 1 ]; then
     echo "Backed up to GitHub (branch: desktop-data)."
