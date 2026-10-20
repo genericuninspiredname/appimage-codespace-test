@@ -60,29 +60,25 @@ fi
 #    which resets on rebuild; the data dir does not). Existing content is
 #    always preserved: new files are merged in, existing files are kept.
 # ---------------------------------------------------------------------------
-link_dir() { # link_dir <src> <dest> [preserve_conflicts]
-  local src="$1" dest="$2" preserve="${3:-0}"
+link_dir() { # link_dir <src> <dest> [migrate]
+  local src="$1" dest="$2" migrate="${3:-0}"
   [ -L "$src" ] && return 0                 # already linked
   mkdir -p "$(dirname "$src")" "$(dirname "$dest")"
   if [ -d "$dest" ]; then
     if [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null)" ]; then
-      if [ "$preserve" = 1 ]; then
-        # Merge for user documents: new files are copied in; files that
-        # exist in both places with different content are kept as
-        # .migrated-<timestamp> copies so nothing is ever lost. If the
-        # merge fails, the source is left untouched (no deletion).
-        ( cd "$src" && find . -type f ! -name '*.migrated-*' | while IFS= read -r f; do
-            if [ -e "$dest/$f" ]; then
-              if ! cmp -s "$src/$f" "$dest/$f"; then
-                cp -a "$src/$f" "$dest/$f.migrated-$(date -u +%Y%m%d-%H%M%S)" || exit 1
-              fi
-            else
-              mkdir -p "$(dirname "$dest/$f")" || exit 1
-              cp -a "$src/$f" "$dest/$f" || exit 1
-            fi
-          done ) || { echo "WARNING: merge into $dest failed; keeping $src untouched" >&2; return 0; }
+      if [ "$migrate" = 1 ]; then
+        # Whole-directory import for user documents: the entire source tree
+        # (files, symlinks, empty folders - everything) is moved as-is into
+        # the persistent destination, so no version can be lost. Only after
+        # the move succeeds is the original path replaced by the symlink.
+        local import_dir
+        import_dir="$dest/Imported-from-home-$(date -u +%Y%m%d-%H%M%S)-$$"
+        if ! mv "$src" "$import_dir" 2>/dev/null; then
+          echo "WARNING: could not import $src into $dest; leaving it untouched" >&2
+          return 0
+        fi
       fi
-      # For app configs (preserve=0) the persisted version wins; on rebuild
+      # For app configs (migrate=0) the persisted version wins; on rebuild
       # the source is only the fresh image default, so dropping it is safe.
     fi
     rm -rf "$src"
