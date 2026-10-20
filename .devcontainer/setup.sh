@@ -90,23 +90,33 @@ link_dir() { # link_dir <src> <dest> [migrate]
 }
 
 link_dir "$HOMEDIR/Files"                     "$DATA_DIR/files" 1
-link_dir "$HOMEDIR/.config/net.imput.helium"  "$DATA_DIR/private/net.imput.helium"
-link_dir "$HOMEDIR/.config/obs-studio"        "$DATA_DIR/private/obs-studio"
+link_dir "$HOMEDIR/.config/epiphany"         "$DATA_DIR/private/epiphany-config"
+link_dir "$HOMEDIR/.local/share/epiphany"   "$DATA_DIR/private/epiphany-data"
 link_dir "$HOMEDIR/.fluxbox"                  "$DATA_DIR/private/fluxbox"
 
 # Codespaces blocks unshare/userns; skip the pkgforge AppImage namespaces
-# check so Helium (and other pkgforge apps) launch without a dialog.
+# check so GNOME Web (and other pkgforge apps) launch without a dialog.
 mkdir -p "$HOMEDIR/.cache"
 touch "$HOMEDIR/.cache/.disable-namespaces-check"
 
-# Browser launcher with remote-desktop-safe flags: --disable-gpu avoids the
-# GPU process crash-restart loop that causes window smearing and slows the
-# software-rendered desktop down.
+# Browser launcher: GNOME Web (WebKit, lightweight). Filters
+# Chromium-specific flags it does not understand, and sets the two env vars
+# it needs on a software-rendered Codespace desktop: the WebKit process
+# sandbox is disabled because Codespaces blocks the unshare syscall it
+# requires, and compositing is disabled because there is no GPU.
 XWWW="${DESKTOP_XWWW:-/usr/local/bin/x-www-browser}"
 mkdir -p "$(dirname "$XWWW")"
 cat > "$XWWW" <<'WB'
-#!/bin/sh
-exec /opt/apps/helium/AppRun --no-sandbox --disable-gpu --disable-dev-shm-usage "$@"
+#!/bin/bash
+flags=()
+for a in "$@"; do
+  case "$a" in
+    --disable-dev-shm-usage|--disable-gpu|--no-sandbox) ;;
+    *) flags+=("$a") ;;
+  esac
+done
+exec env WEBKIT_FORCE_SANDBOX=0 WEBKIT_DISABLE_COMPOSITING_MODE=1 \
+  /opt/apps/web/AppRun "${flags[@]}"
 WB
 chmod +x "$XWWW"
 
@@ -154,7 +164,7 @@ MENU="$HOMEDIR/.fluxbox/menu"
 if [ -f "$MENU" ]; then
   awk -v home="$HOMEDIR" '
     BEGIN {
-      block = "# >>> desktop-apps >>>\n[exec] (Helium Browser) {/opt/apps/helium/AppRun --no-sandbox --disable-gpu}\n[exec] (OBS Studio) {/opt/apps/obs/AppRun}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[exec] (Start Audio) {pulseaudio -D --exit-idle-time=-1}\n[exec] (Volume Control) {pavucontrol}\n# <<< desktop-apps <<<"
+      block = "# >>> desktop-apps >>>\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Back Up Files) {tilix -e desktop-backup}\n# <<< desktop-apps <<<"
       inblock = 0
     }
     /^# >>> desktop-apps >>>/ { inblock = 1; next }
@@ -165,8 +175,6 @@ if [ -f "$MENU" ]; then
     /\[exec\] \(OBS Studio\)/ { next }
     /\[exec\] \(Start Audio\)/ { next }
     /\[exec\] \(Volume Control\)/ { next }
-    /\[exec\] \(Files\)/ { next }
-    /\[exec\] \(Back Up Files\)/ { next }
     !done && /\[begin\]/ { print; print block; done = 1; next }
     { print }
   ' "$MENU" > "$MENU.new" && mv "$MENU.new" "$MENU"

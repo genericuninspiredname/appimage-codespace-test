@@ -1,8 +1,9 @@
 # Browser Desktop in a Codespace — How to Use
 
-A private Linux desktop that opens in a browser tab. It runs in your GitHub
-Codespace (Fluxbox desktop + TigerVNC + noVNC on port 6080) with the Helium
-browser, OBS Studio, and a persistent file system.
+A private, lightweight Linux desktop that opens in a browser tab. It runs in
+your GitHub Codespace (Fluxbox desktop + TigerVNC + noVNC on port 6080) with
+GNOME Web as the browser — WebKit-based and much lighter on CPU and memory
+than Chromium, which matters on a software-rendered 2-core machine.
 
 ## Start it
 
@@ -26,14 +27,12 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
 
 ## Use the desktop
 
-- **Right-click the desktop** to open the Fluxbox menu. Your entries are at the top:
-  Helium Browser, OBS Studio, **Files**, **Back Up Files**, Start Audio, Volume Control.
+- **Right-click the desktop** to open the Fluxbox menu: Web Browser, File
+  Manager, Text Editor, Terminal, plus **Files** (your persistent folder) and
+  **Back Up Files**.
 - The taskbar at the bottom shows running apps; the desktop supports multiple workspaces.
-- **Audio:** click **Start Audio** once per session (gives apps like OBS a sound
-  device). Sound is not forwarded to your machine — it exists inside the codespace
-  so apps can record/capture it.
-- **Resolution:** right-click → System → Set Resolution, or change `VNC_RESOLUTION`
-  in `.devcontainer/devcontainer.json` and rebuild.
+- **Resolution:** right-click → System → Set Resolution (the default is
+  1280x800). Fewer pixels = snappier.
 
 ## Files and persistence
 
@@ -43,9 +42,8 @@ starting, and even container rebuilds, because it lives under `/workspaces`,
 which GitHub preserves across rebuilds (changes outside `/workspaces` are lost
 on rebuild) ([GitHub Docs](https://docs.github.com/en/codespaces/developing-in-a-codespace/rebuilding-the-container-in-a-codespace)).
 
-App settings persist too: the Helium browser profile and OBS settings are
-stored in the same persistent location, so your bookmarks and OBS setup survive
-rebuilds. In the desktop, use the **Files** entry or right-click → File Manager.
+Browser bookmarks and settings persist the same way (GNOME Web's profile is
+stored in the same persistent location), so a rebuild doesn't reset them.
 
 **Backups (survive codespace deletion):** deleting the codespace deletes its
 disk, including `/workspaces`. To keep your documents, click **Back Up Files**
@@ -59,33 +57,30 @@ in the Files window. Save with Ctrl+S — files are written directly to the
 persistent folder.
 
 **Large files:** videos and archives are excluded from backups (`.gitignore`);
-they persist across rebuilds but not across codespace deletion. Keep truly
-important large files elsewhere (e.g. push them to the repo manually).
+they persist across rebuilds but not across codespace deletion.
 
 ## What to expect
 
-- Rendering is software-only (no GPU). Browsing and normal apps are fine;
-  video playback is watchable but not silky.
-- The browser runs with `--disable-gpu`: on a software-rendered desktop the
-  GPU process can crash-loop, which smears the screen with window trails
-  and wastes CPU. If you ever launch it without the flag and see smearing,
-  close and reopen it from the menu.
-- The Helium "unsupported flag --no-sandbox" banner is expected: the codespace
-  runs as root, which requires that flag.
+- Rendering is software-only (no GPU). GNOME Web is light, but the desktop is
+  still CPU-rendered — browsing is fine, video playback is watchable but not silky.
+- The browser runs with its WebKit web-process sandbox disabled
+  (`WEBKIT_FORCE_SANDBOX=0`) because Codespaces blocks the kernel feature
+  (user namespaces) it requires, and with compositing disabled since there's
+  no GPU. Treat the codespace as semi-disposable; the blast radius of a
+  browser exploit is this container.
 - Your local webcam/mic are not available inside the desktop — it's a remote
   view, not a web app.
 
 ## Making it faster
 
 - **Use a 4-core machine** (`-m standardLinux32gb` when creating, or change
-  machine type on a stopped codespace). This is the single biggest speed-up
-  for browser work; it burns your monthly hours at 2x rate.
-- **Lower the resolution:** right-click → System → Set Resolution (the default
-  is 1280x800). Fewer pixels = less software rendering and less to stream.
+  machine type on a stopped codespace). This is the single biggest speed-up;
+  it burns your monthly hours at 2x rate.
+- **Lower the resolution:** right-click → System → Set Resolution.
 - **noVNC quality:** in the browser tab, open the noVNC sidebar and lower the
   quality setting — trades sharpness for responsiveness.
-- Close the browser when not using the desktop; Chromium is the heaviest app
-  in the container.
+- Close the browser when not using the desktop; it's the heaviest app in the
+  container.
 
 ## Add more apps
 
