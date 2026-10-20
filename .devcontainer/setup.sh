@@ -11,13 +11,18 @@ apt-get clean
 install_appimage() {
   local name="$1" url="$2"
   echo "==> Installing $name"
-  mkdir -p /opt/apps && cd /opt/apps
-  curl -sL --retry 3 -o "$name.AppImage" "$url"
-  chmod +x "$name.AppImage"
-  ./"$name.AppImage" --appimage-extract >/dev/null
-  rm -f "$name.AppImage"
-  rm -rf "$name"
-  mv squashfs-root "$name"
+  mkdir -p /opt/apps
+  # pkgforge AppImages extract to AppDir with squashfs-root as a symlink to it,
+  # so extract inside a temp dir and move the real directory out
+  rm -rf "/opt/apps/$name" /opt/apps/"$name.tmp"
+  mkdir -p "/opt/apps/$name.tmp"
+  cd "/opt/apps/$name.tmp"
+  curl -sL --retry 3 -o app.AppImage "$url"
+  chmod +x app.AppImage
+  ./app.AppImage --appimage-extract >/dev/null
+  rm -f app.AppImage
+  mv AppDir "/opt/apps/$name"
+  cd /opt/apps && rm -rf "$name.tmp"
 }
 
 install_appimage helium "https://github.com/pkgforge-dev/Helium-Browser-AppImage-Enhanced/releases/download/0.19.2.1%402026-10-12_1791822299/Helium-0.19.2.1-anylinux-x86_64.AppImage"
