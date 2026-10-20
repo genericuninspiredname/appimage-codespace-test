@@ -40,6 +40,9 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
   or OS usually swallows it when you're in the noVNC tab — **Alt+`**
   (backtick) is an alternative that is usually not intercepted. The menu's
   **Keyboard Shortcuts** entry lists everything.
+- **Task manager:** right-click → **Task Manager** (or press
+  **Ctrl+Alt+Delete**) opens `htop` in a terminal — CPU, memory, and
+  processes, with F9 to kill a stuck app.
 - **Resolution:** right-click → System → Set Resolution (the default is
   1280x800). Fewer pixels = snappier.
 - **After a rebuild:** the desktop may have started before setup applied
@@ -81,21 +84,37 @@ Profiles** submenu (or `desktop-profile` in a terminal):
   each. The default profile name is your GitHub login, so different users
   don't collide.
 
-Security properties:
+How it protects you - and where its limits are:
 
 - The passphrase is read from the terminal by `age` and never stored, logged,
   or transmitted - the repository only ever receives ciphertext.
 - Keys are derived with scrypt (2^18 iterations, ~256 MB of RAM and ~1 second
-  per guess), so brute-forcing the encryption is infeasible. The real
-  protection is passphrase length: use a long passphrase (think a sentence,
-  not a word). If you forget it, the profile cannot be recovered by anyone.
-- Saving (pushing) requires write access to the repo; restoring works for
+  per guess), which makes offline guessing extremely expensive. That resistance
+  only holds if the passphrase is strong: use a long passphrase (think a
+  sentence, not a word). A weak passphrase can still be guessed; a forgotten
+  one cannot be recovered by anyone.
+- Firefox must be closed for save/restore (the tool checks and tells you), so
+  browser data is archived consistently.
+- Trust boundaries to be aware of: the scripts in this repo run inside your
+  codespace, so a malicious repo change (or anyone administering the running
+  container) could capture a passphrase or read decrypted data - this feature
+  protects data *at rest in Git*, not from the repo's own code. Writers with
+  push access can also delete or replace saved profiles (git history keeps old
+  copies). Saving requires write access to the repo; restoring works for
   anyone who can read it and has the passphrase.
 
+**What about apps?** AppImages the repo installs (Firefox, etc.) are pinned in
+`install-apps.sh` and reinstall automatically on rebuild, so they don't need
+saving. Anything you download yourself is saved **if you keep it in `~/Files`**
+(that folder is part of every encrypted profile). Apps installed system-wide
+(via `apt`, or dropped outside `/workspaces`) are not part of profiles.
+
 Note: the plain **Back Up Files** path commits `~/Files` **unencrypted** -
-convenient, but readable by anyone with access to the repo. Use encrypted
-profiles for anything sensitive. Restoring a profile overwrites matching
-files in `~/Files` and the browser profile.
+convenient, but readable by anyone with access to the repo (and whatever it
+backed up earlier stays in the branch history). Use encrypted profiles for
+anything sensitive. Restoring a profile **replaces** `~/Files` and the browser
+profile (the previous state is kept in a local `.pre-restore-*` folder inside
+the data dir, which is never pushed).
 
 **Editing files:** right-click → Text Editor (mousepad), or double-click files
 in the Files window. Save with Ctrl+S — files are written directly to the
@@ -139,6 +158,14 @@ they persist across rebuilds but not across codespace deletion.
   quality setting — trades sharpness for responsiveness.
 - Close the browser when not using the desktop; it's the heaviest app in the
   container.
+
+**Resource budget** (measured on a 2-core codespace): the desktop itself is
+lean — Fluxbox ~12 MB, the VNC server ~36 MB, noVNC's websockify ~33 MB
+(~80 MB total for the whole desktop, before any apps). The wallpaper is a
+20 KB PNG and the taskbar theme adds no measurable memory. Firefox under
+software WebGL is the big one (several hundred MB with a few tabs open,
+more with games like PokéRogue running) — the Task Manager (Ctrl+Alt+Delete)
+shows you where the memory actually goes.
 
 ## Add more apps
 

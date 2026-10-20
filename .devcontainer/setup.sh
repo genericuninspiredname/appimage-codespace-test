@@ -164,69 +164,124 @@ chmod +x "$BIN_DIR/desktop-backup"
 # ---------------------------------------------------------------------------
 cat > "$BIN_DIR/desktop-profile" <<'PR'
 #!/usr/bin/env bash
-set -e
+# Encrypted save profiles (see README). Only ciphertext is committed; the
+# passphrase is read from the terminal by age and never stored or logged.
+set -euo pipefail
 DATA_DIR="${DESKTOP_DATA_DIR:-/workspaces/desktop-data}"
 PROF_DIR="$DATA_DIR/profiles"
 ACTION="${1:-}"
 cd "$DATA_DIR"
 
+# Fetch what other users pushed. list/restore read straight from the fetched
+# state (FETCH_HEAD) - no merge, so local history and uncommitted files are
+# never touched. save rebases on top of it only when a push collides.
+fetch_origin() {
+  git fetch -q origin desktop-data 2>/dev/null || true
+}
+profile_blob() { # <name> -> prints the encrypted profile from origin (or local)
+  if git cat-file -e "FETCH_HEAD:profiles/$1.tar.gz.age" 2>/dev/null; then
+    git show "FETCH_HEAD:profiles/$1.tar.gz.age"
+  elif [ -f "$PROF_DIR/$1.tar.gz.age" ]; then
+    cat "$PROF_DIR/$1.tar.gz.age"
+  else
+    return 1
+  fi
+}
+
 case "$ACTION" in
   list)
-    if ls "$PROF_DIR"/*.age >/dev/null 2>&1; then
+    fetch_origin
+    if git ls-tree -r --name-only FETCH_HEAD -- profiles/ 2>/dev/null | grep -q .; then
+      git ls-tree -r --name-only FETCH_HEAD -- profiles/ | sed 's|.*/||;s|\.tar\.gz\.age$||'
+    elif ls "$PROF_DIR"/*.age >/dev/null 2>&1; then
       ls -1 "$PROF_DIR"/*.age | sed 's|.*/||;s|\.tar\.gz\.age$||'
     else
       echo "(no encrypted profiles saved yet)"
     fi
     ;;
   save)
+    if pgrep -x firefox >/dev/null; then
+      echo "Firefox is running - close it first so the browser profile" >&2
+      echo "(bookmarks, game saves) is archived consistently." >&2
+      exit 1
+    fi
     NAME="${2:-${GITHUB_USER:-}}"
     while [ -z "$NAME" ]; do read -rp "Profile name: " NAME; done
     # keep the name filesystem- and git-safe
     NAME=$(printf '%s' "$NAME" | tr -c 'a-zA-Z0-9._-' '-' | cut -c1-40)
-    [ -n "$NAME" ] && [ "$NAME" != "." ] && [ "$NAME" != ".." ] || { echo "Invalid profile name." >&2; exit 1; }
+    case "$NAME" in ""|"."|"..") echo "Invalid profile name." >&2; exit 1;; esac
     mkdir -p "$PROF_DIR"
+    fetch_origin
     echo "This encrypts ~/Files plus the browser profile (bookmarks, game saves)"
     echo "and pushes ONLY the ciphertext to GitHub. Use a LONG passphrase - it is"
     echo "never stored anywhere; if you forget it, the profile is unrecoverable."
-    tar -czf - --ignore-failed-read \
+    TMPD="$(mktemp -d)"; trap 'rm -rf "$TMPD"' EXIT
+    # tar first, then encrypt to temp, then swap in atomically: a failure
+    # anywhere leaves the previous saved profile untouched.
+    tar -czf "$TMPD/profile.tar.gz" \
         --exclude='*/cache2' --exclude='*/startupCache' \
         --exclude='*/cache2/*' --exclude='*/startupCache/*' \
-        files private/mozilla \
-        2>/dev/null | age -p -o "$PROF_DIR/$NAME.tar.gz.age"
+        files private/mozilla
+    age -p -o "$TMPD/profile.tar.gz.age" "$TMPD/profile.tar.gz"
+    mv -f "$TMPD/profile.tar.gz.age" "$PROF_DIR/$NAME.tar.gz.age"
     git add -A -- profiles/
-    if ! git diff --cached --quiet; then
-      git commit -qm "encrypted profile: $NAME ($(date -u +%Y-%m-%d_%H:%M))"
+    if ! git diff --cached --quiet -- profiles/; then
+      git commit -qm "encrypted profile: $NAME ($(date -u +%Y-%m-%d_%H:%M))" -- profiles/
     fi
     if git push -q origin desktop-data 2>/tmp/profile-push.err; then
       echo "Profile '$NAME' saved (encrypted) and pushed to GitHub."
     else
-      echo "Push to GitHub FAILED:" >&2
-      head -3 /tmp/profile-push.err >&2
-      echo "The encrypted profile is committed locally - run this again later to retry." >&2
-      exit 1
+      # Someone else saved first: replay our commit on top, keep local files.
+      if git pull --rebase --autostash -q origin desktop-data 2>>/tmp/profile-push.err \
+         && git push -q origin desktop-data 2>>/tmp/profile-push.err; then
+        echo "Profile '$NAME' saved (encrypted) and pushed to GitHub."
+      else
+        echo "Push to GitHub FAILED:" >&2
+        head -3 /tmp/profile-push.err >&2
+        echo "The encrypted profile is committed locally - run this again later to retry." >&2
+        exit 1
+      fi
     fi
     ;;
   restore)
+    if pgrep -x firefox >/dev/null; then
+      echo "Firefox is running - close it first so the restored browser profile" >&2
+      echo "is not overwritten by the live one." >&2
+      exit 1
+    fi
     NAME="${2:-}"
+    fetch_origin
     if [ -z "$NAME" ]; then
       echo "Saved profiles:"
       "$0" list
       read -rp "Profile to restore: " NAME
     fi
-    F="$PROF_DIR/$NAME.tar.gz.age"
-    [ -f "$F" ] || { echo "No profile '$NAME'. Try 'desktop-profile list'." >&2; exit 1; }
-    TMP="$(mktemp -d)"
+    TMPD="$(mktemp -d)"; trap 'rm -rf "$TMPD"' EXIT
+    if ! profile_blob "$NAME" > "$TMPD/profile.tar.gz.age" 2>/dev/null; then
+      echo "No profile '$NAME'. Try 'desktop-profile list'." >&2
+      exit 1
+    fi
     # age reads the passphrase from the terminal and writes nothing on a
     # wrong one, so a failed decrypt leaves the desktop untouched.
-    if ! age -d -o "$TMP/profile.tar.gz" "$F" 2>/tmp/profile-dec.err; then
-      rm -rf "$TMP"
+    if ! age -d -o "$TMPD/profile.tar.gz" "$TMPD/profile.tar.gz.age" 2>/tmp/profile-dec.err; then
       echo "Restore FAILED - wrong password or corrupted profile:" >&2
       grep -i "passphrase\|error" /tmp/profile-dec.err | head -1 >&2
       exit 1
     fi
-    tar -xzf "$TMP/profile.tar.gz" -C "$DATA_DIR"
-    rm -rf "$TMP"
-    echo "Profile '$NAME' restored to ~/Files and the browser (reopen apps to see it)."
+    # Fully extract first; only a complete archive triggers the swap.
+    mkdir -p "$TMPD/x"
+    tar -xzf "$TMPD/profile.tar.gz" -C "$TMPD/x"
+    # The profile REPLACES ~/Files and the browser profile (no mixing with
+    # what is on this codespace). The previous state is kept locally.
+    BK="$DATA_DIR/.pre-restore-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$BK"
+    [ -d files ] && mv files "$BK/files"
+    [ -d private/mozilla ] && mv private/mozilla "$BK/private-mozilla"
+    mkdir -p private
+    # mv to the full target path: files/ was moved aside, so this is a rename
+    mv "$TMPD/x/files" "$DATA_DIR/files"
+    [ -d "$TMPD/x/private/mozilla" ] && mv "$TMPD/x/private/mozilla" "$DATA_DIR/private/mozilla"
+    echo "Profile '$NAME' restored. Previous state kept in $BK (local only)."
     ;;
   *)
     echo "Usage: desktop-profile save [name]    encrypt ~/Files + browser data, push"
@@ -246,7 +301,7 @@ MENU="$HOMEDIR/.fluxbox/menu"
 if [ -f "$MENU" ]; then
   awk -v home="$HOMEDIR" -v fluxdir="$HOMEDIR/.fluxbox" '
     BEGIN {
-      block = "# >>> desktop-apps >>>\n[exec] (Run Program...) {fbrun}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Keyboard Shortcuts) {mousepad " fluxdir "/SHORTCUTS}\n[submenu] (Encrypted Profiles) {}\n[exec] (Save Profile) {tilix -t \"Save Profile\" -e desktop-profile save}\n[exec] (Restore Profile) {tilix -t \"Restore Profile\" -e desktop-profile restore}\n[exec] (List Profiles) {tilix -t \"Profiles\" -e desktop-profile list}\n[end]\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[restart] (Apply Desktop Updates) {}\n# <<< desktop-apps <<<"
+      block = "# >>> desktop-apps >>>\n[exec] (Run Program...) {fbrun}\n[exec] (Task Manager) {tilix -e htop}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Keyboard Shortcuts) {mousepad " fluxdir "/SHORTCUTS}\n[submenu] (Encrypted Profiles) {}\n[exec] (Save Profile) {tilix -t \"Save Profile\" -e desktop-profile save}\n[exec] (Restore Profile) {tilix -t \"Restore Profile\" -e desktop-profile restore}\n[exec] (List Profiles) {tilix -t \"Profiles\" -e desktop-profile list}\n[end]\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[restart] (Apply Desktop Updates) {}\n# <<< desktop-apps <<<"
       inblock = 0
     }
     /^# >>> desktop-apps >>>/ { inblock = 1; next }
@@ -313,12 +368,44 @@ OVERLAY="$FLUXDIR/overlay"
 overlay_block="# >>> desktop-overlay >>>
 background: aspect
 background.pixmap: $FLUXDIR/backgrounds/wallpaper.png
-toolbar.iconbar.focused: flat solid
-toolbar.iconbar.focused.color: rgb:FC/F9/DF
-toolbar.iconbar.focused.textColor: rgb:20/20/20
+# --- dark taskbar theme ---
+toolbar: flat gradient vertical
+toolbar.color: rgb:28/28/3A
+toolbar.colorTo: rgb:1C/1C/29
+toolbar.textColor: rgb:C8/C8/D8
+toolbar.bevelWidth: 1
+toolbar.clock: flat solid
+toolbar.clock.color: rgb:1E/1E/2C
+toolbar.clock.textColor: rgb:9A/9A/B5
+toolbar.workspace: parentrelative
+toolbar.workspace.textColor: rgb:C0/C0/D4
+toolbar.button: parentrelative
+toolbar.button.picColor: rgb:9A/9A/B5
+toolbar.button.pressed: parentrelative
+toolbar.button.pressed.picColor: rgb:D0/D0/E0
+toolbar.iconbar.empty: flat solid
+toolbar.iconbar.empty.color: rgb:1E/1E/2C
+toolbar.iconbar.focused: flat gradient vertical
+toolbar.iconbar.focused.color: rgb:3E/3E/5A
+toolbar.iconbar.focused.colorTo: rgb:2C/2C/42
+toolbar.iconbar.focused.textColor: rgb:F0/F0/FA
+toolbar.iconbar.focused.borderColor: rgb:62/62/94
+toolbar.iconbar.focused.borderWidth: 1
 toolbar.iconbar.unfocused: flat solid
-toolbar.iconbar.unfocused.color: rgb:DB/DA/DB
-toolbar.iconbar.unfocused.textColor: rgb:45/45/45
+toolbar.iconbar.unfocused.color: rgb:22/22/30
+toolbar.iconbar.unfocused.textColor: rgb:85/85/9C
+# --- dark root menu ---
+menu.title: flat gradient vertical
+menu.title.color: rgb:2E/2E/44
+menu.title.colorTo: rgb:20/20/30
+menu.title.textColor: rgb:D8/D8/E8
+menu.frame: flat solid
+menu.frame.color: rgb:24/24/33
+menu.frame.textColor: rgb:C4/C4/D4
+menu.frame.disableColor: rgb:5C/5C/6C
+menu.hilite: flat solid
+menu.hilite.color: rgb:3D/3D/5E
+menu.hilite.textColor: rgb:EE/EE/F8
 # <<< desktop-overlay <<<"
 if [ -f "$OVERLAY" ]; then
   awk -v block="$overlay_block" '
@@ -338,27 +425,34 @@ KEYS="$FLUXDIR/keys"
 keys_block="# >>> desktop-keys >>>
 # Alt+\` cycles windows too: browsers/OSes usually capture Alt+Tab when the
 # desktop is used through noVNC, and Alt+\` is not intercepted.
-Mod1 Grave :NextWindow {groups} (workspace=[current])
-Mod1 Shift Grave :PrevWindow {groups} (workspace=[current])
+Mod1 grave :NextWindow {groups} (workspace=[current])
+Mod1 Shift grave :PrevWindow {groups} (workspace=[current])
 # Alt+1..4 jump straight to a workspace
 Mod1 1 :Workspace 1
 Mod1 2 :Workspace 2
 Mod1 3 :Workspace 3
 Mod1 4 :Workspace 4
+# Ctrl+Alt+Delete opens the task manager, like a normal desktop
+Control Mod1 Delete :ExecCommand tilix -e htop
 # <<< desktop-keys <<<"
 if [ ! -f "$KEYS" ]; then
   # First run: fluxbox would create this from /etc/X11/fluxbox/keys at first
   # start (postCreate runs before that); write that default plus our block.
-  cat /etc/X11/fluxbox/keys > "$KEYS" 2>/dev/null || true
+  # Drop the stock Ctrl+Alt+Del :Exit binding (it would kill the desktop, and
+  # a duplicate would make fluxbox reject our task-manager binding).
+  grep -v '^Control Mod1 Delete' /etc/X11/fluxbox/keys > "$KEYS" 2>/dev/null || true
   [ -s "$KEYS" ] || printf 'OnDesktop Mouse3 :RootMenu\n' > "$KEYS"
   printf '%s\n' "$keys_block" >> "$KEYS"
 elif ! grep -q '^# >>> desktop-keys >>>' "$KEYS"; then
+  grep -v '^Control Mod1 Delete' "$KEYS" > "$KEYS.new" && mv "$KEYS.new" "$KEYS"
   printf '%s\n' "$keys_block" >> "$KEYS"
 else
   awk '
     /^# >>> desktop-keys >>>/ { inb = 1; next }
     /^# <<< desktop-keys <<</ { inb = 0; next }
     inb { next }
+    # drop any stock Ctrl+Alt+Del binding outside our block (see above)
+    /^Control Mod1 Delete/ && !inb { next }
     { print }
   ' "$KEYS" > "$KEYS.new" && mv "$KEYS.new" "$KEYS"
   printf '%s\n' "$keys_block" >> "$KEYS"
@@ -391,6 +485,9 @@ Windows
   Alt+drag                   move; Alt+right-drag resizes
   Ctrl+drag titlebar         onto another window to group them as tabs
   Double-click titlebar      shade the window
+
+System
+  Ctrl+Alt+Delete            task manager (htop; also in the menu)
 DOC
 
 # --- WebGL: the codespace has no GPU; Firefox renders WebGL in software
@@ -400,10 +497,15 @@ DOC
 for prof in "$HOMEDIR"/.mozilla/firefox/*.default-release \
             "$HOMEDIR"/.mozilla/firefox/*.default; do
   [ -d "$prof" ] || continue
-  cat > "$prof/user.js" <<'JS'
-user_pref("webgl.force-enabled", true);
-user_pref("webgl.disabled", false);
-JS
+  # Managed prefs only: replace just our webgl lines, keep anything the
+  # user authored in user.js.
+  touch "$prof/user.js"
+  # '|| true': grep -v exits 1 when it filters out every line (normal here).
+  { grep -vF 'user_pref("webgl.force-enabled"' "$prof/user.js" \
+      | grep -vF 'user_pref("webgl.disabled"'; } > "$prof/user.js.new" || true
+  printf 'user_pref("webgl.force-enabled", true);\nuser_pref("webgl.disabled", false);\n' \
+    >> "$prof/user.js.new"
+  mv "$prof/user.js.new" "$prof/user.js"
 done
 
 # --- apply to a running desktop: this script can run after the desktop has

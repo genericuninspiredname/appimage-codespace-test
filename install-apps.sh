@@ -2,13 +2,13 @@
 set -e
 
 # System software OpenGL (llvmpipe) for apps that link system Mesa instead
-# of bundling their own, feh to set the desktop wallpaper, and age for the
+# of bundling their own, htop for the task manager, and age for the
 # encrypted save profiles. The Firefox AppImage ships its own Mesa, so the
 # GL libs are mostly for other apps and for `glxinfo -B` diagnostics.
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
-  libgl1-mesa-dri libegl-mesa0 libglx-mesa0 feh age
+  libgl1-mesa-dri libegl-mesa0 libglx-mesa0 htop age
 rm -rf /var/lib/apt/lists/*
 
 install_appimage() {
