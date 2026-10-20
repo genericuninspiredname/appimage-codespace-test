@@ -66,12 +66,26 @@ important large files elsewhere (e.g. push them to the repo manually).
 
 - Rendering is software-only (no GPU). Browsing and normal apps are fine;
   video playback is watchable but not silky.
+- The browser runs with `--disable-gpu`: on a software-rendered desktop the
+  GPU process can crash-loop, which smears the screen with window trails
+  and wastes CPU. If you ever launch it without the flag and see smearing,
+  close and reopen it from the menu.
 - The Helium "unsupported flag --no-sandbox" banner is expected: the codespace
   runs as root, which requires that flag.
 - Your local webcam/mic are not available inside the desktop — it's a remote
   view, not a web app.
-- Smoother experience: create the codespace with a 4-core machine
-  (`-m standardLinux32gb`).
+
+## Making it faster
+
+- **Use a 4-core machine** (`-m standardLinux32gb` when creating, or change
+  machine type on a stopped codespace). This is the single biggest speed-up
+  for browser work; it burns your monthly hours at 2x rate.
+- **Lower the resolution:** right-click → System → Set Resolution (the default
+  is 1280x800). Fewer pixels = less software rendering and less to stream.
+- **noVNC quality:** in the browser tab, open the noVNC sidebar and lower the
+  quality setting — trades sharpness for responsiveness.
+- Close the browser when not using the desktop; Chromium is the heaviest app
+  in the container.
 
 ## Add more apps
 

@@ -99,6 +99,17 @@ link_dir "$HOMEDIR/.fluxbox"                  "$DATA_DIR/private/fluxbox"
 mkdir -p "$HOMEDIR/.cache"
 touch "$HOMEDIR/.cache/.disable-namespaces-check"
 
+# Browser launcher with remote-desktop-safe flags: --disable-gpu avoids the
+# GPU process crash-restart loop that causes window smearing and slows the
+# software-rendered desktop down.
+XWWW="${DESKTOP_XWWW:-/usr/local/bin/x-www-browser}"
+mkdir -p "$(dirname "$XWWW")"
+cat > "$XWWW" <<'WB'
+#!/bin/sh
+exec /opt/apps/helium/AppRun --no-sandbox --disable-gpu --disable-dev-shm-usage "$@"
+WB
+chmod +x "$XWWW"
+
 # ---------------------------------------------------------------------------
 # 3. Backup tool: explicitly backs up ~/Files (documents only, never
 #    profiles/credentials) to the desktop-data branch of this repo.
@@ -143,7 +154,7 @@ MENU="$HOMEDIR/.fluxbox/menu"
 if [ -f "$MENU" ]; then
   awk -v home="$HOMEDIR" '
     BEGIN {
-      block = "# >>> desktop-apps >>>\n[exec] (Helium Browser) {/opt/apps/helium/AppRun --no-sandbox}\n[exec] (OBS Studio) {/opt/apps/obs/AppRun}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[exec] (Start Audio) {pulseaudio -D --exit-idle-time=-1}\n[exec] (Volume Control) {pavucontrol}\n# <<< desktop-apps <<<"
+      block = "# >>> desktop-apps >>>\n[exec] (Helium Browser) {/opt/apps/helium/AppRun --no-sandbox --disable-gpu}\n[exec] (OBS Studio) {/opt/apps/obs/AppRun}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[exec] (Start Audio) {pulseaudio -D --exit-idle-time=-1}\n[exec] (Volume Control) {pavucontrol}\n# <<< desktop-apps <<<"
       inblock = 0
     }
     /^# >>> desktop-apps >>>/ { inblock = 1; next }
