@@ -2,7 +2,7 @@
 
 A private Linux desktop that opens in a browser tab. It runs in your GitHub
 Codespace (Fluxbox desktop + TigerVNC + noVNC on port 6080) with the Helium
-browser and OBS Studio preinstalled.
+browser, OBS Studio, and a persistent file system.
 
 ## Start it
 
@@ -26,14 +26,41 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
 
 ## Use the desktop
 
-- **Right-click the desktop** to open the Fluxbox menu. Your apps are at the top:
-  Helium Browser, OBS Studio, Start Audio, Volume Control.
+- **Right-click the desktop** to open the Fluxbox menu. Your entries are at the top:
+  Helium Browser, OBS Studio, **Files**, **Back Up Files**, Start Audio, Volume Control.
 - The taskbar at the bottom shows running apps; the desktop supports multiple workspaces.
 - **Audio:** click **Start Audio** once per session (gives apps like OBS a sound
   device). Sound is not forwarded to your machine — it exists inside the codespace
   so apps can record/capture it.
 - **Resolution:** right-click → System → Set Resolution, or change `VNC_RESOLUTION`
   in `.devcontainer/devcontainer.json` and rebuild.
+
+## Files and persistence
+
+**Where to save things:** the **Files** menu entry (or `~/Files` in a terminal)
+opens your persistent folder. Everything you put there survives stopping,
+starting, and even container rebuilds, because it lives under `/workspaces`,
+which GitHub preserves across rebuilds (changes outside `/workspaces` are lost
+on rebuild) ([GitHub Docs](https://docs.github.com/en/codespaces/developing-in-a-codespace/rebuilding-the-container-in-a-codespace)).
+
+App settings persist too: the Helium browser profile and OBS settings are
+stored in the same persistent location, so your bookmarks and OBS setup survive
+rebuilds. In the desktop, use the **Files** entry or right-click → File Manager.
+
+**Backups (survive codespace deletion):** deleting the codespace deletes its
+disk, including `/workspaces`. To keep your documents, click **Back Up Files**
+in the menu — it commits `~/Files` to the private `desktop-data` branch of this
+repo and pushes it to GitHub. A fresh codespace restores those files
+automatically on creation. Backups include only your documents in `~/Files` —
+browser profiles and credentials are deliberately never pushed.
+
+**Editing files:** right-click → Text Editor (mousepad), or double-click files
+in the Files window. Save with Ctrl+S — files are written directly to the
+persistent folder.
+
+**Large files:** videos and archives are excluded from backups (`.gitignore`);
+they persist across rebuilds but not across codespace deletion. Keep truly
+important large files elsewhere (e.g. push them to the repo manually).
 
 ## What to expect
 
@@ -66,4 +93,5 @@ setup marks it disabled. Other AppImages may need
 
 - Billed for compute while **running**; disk storage counts while it exists
   (even stopped). Stop when done for the day; delete when done for good.
-- Deleting a codespace does not touch the repo — you can always create a new one.
+- Deleting a codespace does not touch the repo — you can always create a new one
+  (and **Back Up Files** restores your documents).
