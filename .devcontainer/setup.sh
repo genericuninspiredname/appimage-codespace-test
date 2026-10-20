@@ -15,18 +15,23 @@ REMOTE_URL="${DESKTOP_REMOTE_URL:-$(git -C "$REPO_DIR" remote get-url origin 2>/
 
 # ---------------------------------------------------------------------------
 # 1. Persistent data directory (survives stop/start and container rebuilds,
-#    because /workspaces is preserved on rebuild; deletion of the codespace
+#    because /workspaces is preserved on rebuild; deleting the codespace
 #    loses it unless backed up - see the backup script below).
+#    Never overwrites anything already on disk: restore only fills a fresh
+#    git repo, and merges (never replaces) existing folders.
 # ---------------------------------------------------------------------------
 if [ ! -d "$DATA_DIR/.git" ]; then
-  mkdir -p "$DATA_DIR/files" "$DATA_DIR/private"
-  git -C "$DATA_DIR" init -q -b desktop-data
+  git -C "$DATA_DIR" init -q -b desktop-data 2>/dev/null || { mkdir -p "$DATA_DIR" && git -C "$DATA_DIR" init -q -b desktop-data; }
+  git -C "$DATA_DIR" remote remove origin >/dev/null 2>&1 || true
   git -C "$DATA_DIR" remote add origin "$REMOTE_URL"
-  # Restore from GitHub if a previous backup exists (fresh codespace only;
-  # never run on an existing data dir, so nothing on disk gets overwritten)
+  # Restore from GitHub if a previous backup exists. This makes the local
+  # branch share the remote's history so future backups push cleanly.
   if git -C "$DATA_DIR" fetch -q origin desktop-data 2>/dev/null; then
-    git -C "$DATA_DIR" checkout -q FETCH_HEAD -- . 2>/dev/null || true
-    git -C "$DATA_DIR" branch -q --set-upstream-to=origin/desktop-data desktop-data 2>/dev/null || true
+    if git -C "$DATA_DIR" checkout -q -B desktop-data FETCH_HEAD 2>/dev/null; then
+      git -C "$DATA_DIR" branch -q --set-upstream-to=origin/desktop-data desktop-data 2>/dev/null || true
+    else
+      echo "WARNING: could not restore backup cleanly (files already present?). Continuing without restore." >&2
+    fi
   fi
 fi
 mkdir -p "$DATA_DIR/files" "$DATA_DIR/private"
@@ -51,15 +56,19 @@ IGN
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Visible "Files" folder + persistent app settings (symlinked into /root,
-#    which resets on rebuild; the data dir does not)
+# 2. Visible "Files" folder + persistent app settings (symlinked into $HOME,
+#    which resets on rebuild; the data dir does not). Existing content is
+#    always preserved: new files are merged in, existing files are kept.
 # ---------------------------------------------------------------------------
 link_dir() { # link_dir <real path> <persistent target>
   local src="$1" dest="$2"
   [ -L "$src" ] && return 0                 # already linked
   mkdir -p "$(dirname "$src")" "$(dirname "$dest")"
   if [ -d "$dest" ]; then
-    rm -rf "$src"                            # keep the persisted version
+    # Destination already persisted: merge src into it (keep persisted files,
+    # add anything new), then replace src with the link.
+    cp -an "$src"/. "$dest"/ 2>/dev/null || true
+    rm -rf "$src"
   elif [ -d "$src" ]; then
     mv "$src" "$dest"                        # first run: move existing in
   fi
@@ -80,39 +89,61 @@ touch "$HOMEDIR/.cache/.disable-namespaces-check"
 # ---------------------------------------------------------------------------
 # 3. Backup tool: explicitly backs up ~/Files (documents only, never
 #    profiles/credentials) to the desktop-data branch of this repo.
+#    Reinstalled on every setup run so fixes reach existing codespaces.
 # ---------------------------------------------------------------------------
 mkdir -p "$BIN_DIR"
-if [ ! -f "$BIN_DIR/desktop-backup" ]; then
-  cat > "$BIN_DIR/desktop-backup" <<'BK'
+cat > "$BIN_DIR/desktop-backup" <<'BK'
 #!/usr/bin/env bash
 set -e
 DATA_DIR="${DESKTOP_DATA_DIR:-/workspaces/desktop-data}"
 cd "$DATA_DIR"
 git add -A -- files/ .gitignore
-if git diff --cached --quiet; then
-  echo "Nothing new to back up."
-  exit 0
+committed=0
+if ! git diff --cached --quiet; then
+  git commit -qm "backup $(date -u +%Y-%m-%d_%H:%M)"
+  committed=1
 fi
-git commit -qm "backup $(date -u +%Y-%m-%d_%H:%M)"
-if git push -q -u origin desktop-data 2>/dev/null; then
-  echo "Backed up to GitHub (branch: desktop-data)."
+# Always attempt the push: retries after earlier failures, even with no
+# new changes, so locally-committed backups reach GitHub eventually.
+# Rebase first so a backup from another codespace does not cause a rejection.
+git pull -q --rebase --autostash origin desktop-data 2>/dev/null || true
+if git push -q -u origin desktop-data 2>/tmp/desktop-push.err; then
+  if [ "$committed" = 1 ]; then
+    echo "Backed up to GitHub (branch: desktop-data)."
+  else
+    echo "Everything already backed up."
+  fi
 else
-  echo "Saved locally, but push to GitHub FAILED (network or permissions)."
+  echo "Push to GitHub FAILED:" >&2
+  head -3 /tmp/desktop-push.err >&2
+  echo "Your changes are saved locally - run this again later to retry." >&2
   exit 1
 fi
 BK
-  chmod +x "$BIN_DIR/desktop-backup"
-fi
+chmod +x "$BIN_DIR/desktop-backup"
 
 # ---------------------------------------------------------------------------
-# 4. Desktop menu entries (menu is written once by desktop-lite; guarded so
-#    this is safe to run repeatedly)
+# 4. Desktop menu entries (managed block: replaced wholesale on every run,
+#    so upgrades add entries without duplicating old ones)
 # ---------------------------------------------------------------------------
 MENU="$HOMEDIR/.fluxbox/menu"
-if [ -f "$MENU" ] && ! grep -q "Helium Browser" "$MENU"; then
+if [ -f "$MENU" ]; then
   awk -v home="$HOMEDIR" '
-    BEGIN { apps = "[exec] (Helium Browser) {/opt/apps/helium/AppRun --no-sandbox}\n[exec] (OBS Studio) {/opt/apps/obs/AppRun}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[exec] (Start Audio) {pulseaudio -D --exit-idle-time=-1}\n[exec] (Volume Control) {pavucontrol}" }
-    !done && /\[begin\]/ { print; print apps; done=1; next }
+    BEGIN {
+      block = "# >>> desktop-apps >>>\n[exec] (Helium Browser) {/opt/apps/helium/AppRun --no-sandbox}\n[exec] (OBS Studio) {/opt/apps/obs/AppRun}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[exec] (Start Audio) {pulseaudio -D --exit-idle-time=-1}\n[exec] (Volume Control) {pavucontrol}\n# <<< desktop-apps <<<"
+      inblock = 0
+    }
+    /^# >>> desktop-apps >>>/ { inblock = 1; next }
+    /^# <<< desktop-apps <<</ { inblock = 0; next }
+    inblock { next }
+    # drop entries written by older versions of this script
+    /\[exec\] \(Helium Browser\)/ { next }
+    /\[exec\] \(OBS Studio\)/ { next }
+    /\[exec\] \(Start Audio\)/ { next }
+    /\[exec\] \(Volume Control\)/ { next }
+    /\[exec\] \(Files\)/ { next }
+    /\[exec\] \(Back Up Files\)/ { next }
+    !done && /\[begin\]/ { print; print block; done = 1; next }
     { print }
   ' "$MENU" > "$MENU.new" && mv "$MENU.new" "$MENU"
 fi
