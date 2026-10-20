@@ -2,8 +2,8 @@
 
 A private, lightweight Linux desktop that opens in a browser tab. It runs in
 your GitHub Codespace (Fluxbox desktop + TigerVNC + noVNC on port 6080) with
-GNOME Web as the browser — WebKit-based and much lighter on CPU and memory
-than Chromium, which matters on a software-rendered 2-core machine.
+Firefox as the browser — much lighter than Chromium on CPU and memory, and it
+renders cleanly on a software-rendered 2-core machine.
 
 ## Start it
 
@@ -61,13 +61,14 @@ they persist across rebuilds but not across codespace deletion.
 
 ## What to expect
 
-- Rendering is software-only (no GPU). GNOME Web is light, but the desktop is
-  still CPU-rendered — browsing is fine, video playback is watchable but not silky.
-- The browser runs with its WebKit web-process sandbox disabled
-  (`WEBKIT_FORCE_SANDBOX=0`) because Codespaces blocks the kernel feature
-  (user namespaces) it requires, and with compositing disabled since there's
-  no GPU. Treat the codespace as semi-disposable; the blast radius of a
-  browser exploit is this container.
+- Rendering is software-only (no GPU). Firefox is a full browser on a
+  CPU-rendered desktop — browsing is fine, video playback is watchable but not silky.
+- Firefox runs with its content-process sandbox disabled
+  (`MOZ_DISABLE_CONTENT_SANDBOX=1`) because Codespaces blocks the kernel
+  feature (user namespaces) it requires. Firefox shows an orange
+  "security sandbox is disabled" banner about this — expected, not an error.
+  Treat the codespace as semi-disposable; the blast radius of a browser
+  exploit is this container.
 - Your local webcam/mic are not available inside the desktop — it's a remote
   view, not a web app.
 

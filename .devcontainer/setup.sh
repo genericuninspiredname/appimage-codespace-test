@@ -90,31 +90,18 @@ link_dir() { # link_dir <src> <dest> [migrate]
 }
 
 link_dir "$HOMEDIR/Files"                     "$DATA_DIR/files" 1
-link_dir "$HOMEDIR/.config/epiphany"         "$DATA_DIR/private/epiphany-config"
-link_dir "$HOMEDIR/.local/share/epiphany"   "$DATA_DIR/private/epiphany-data"
+link_dir "$HOMEDIR/.mozilla"                   "$DATA_DIR/private/mozilla"
 link_dir "$HOMEDIR/.fluxbox"                  "$DATA_DIR/private/fluxbox"
 
 # Codespaces blocks unshare/userns; skip the pkgforge AppImage namespaces
-# check so GNOME Web (and other pkgforge apps) launch without a dialog.
+# check so Firefox (and other pkgforge apps) launch without a dialog.
 mkdir -p "$HOMEDIR/.cache"
 touch "$HOMEDIR/.cache/.disable-namespaces-check"
 
-# GNOME Web aborts on launch ("Failed to run the migrator process") because it
-# looks for its profile-migrator helper at a hardcoded system path that the
-# AppImage does not bundle. Fresh profiles need no migration, so a no-op
-# stub at that path satisfies it.
-if [ ! -e "${DESKTOP_EPHY_LIB:-/usr/lib/epiphany}/ephy-profile-migrator" ]; then
-  mkdir -p "${DESKTOP_EPHY_LIB:-/usr/lib/epiphany}"
-  printf '#!/bin/sh\n# no-op stub: fresh profiles need no migration\nexit 0\n' \
-    > "${DESKTOP_EPHY_LIB:-/usr/lib/epiphany}/ephy-profile-migrator"
-  chmod +x "${DESKTOP_EPHY_LIB:-/usr/lib/epiphany}/ephy-profile-migrator"
-fi
-
-# Browser launcher: GNOME Web (WebKit, lightweight). Filters
-# Chromium-specific flags it does not understand, and sets the two env vars
-# it needs on a software-rendered Codespace desktop: the WebKit process
-# sandbox is disabled because Codespaces blocks the unshare syscall it
-# requires, and compositing is disabled because there is no GPU.
+# Browser launcher: Firefox. Filters Chromium-specific flags it does not
+# understand, and disables its content-process sandbox because Codespaces
+# blocks the user namespaces it requires (Firefox shows a warning banner
+# about this - expected in this environment).
 XWWW="${DESKTOP_XWWW:-/usr/local/bin/x-www-browser}"
 mkdir -p "$(dirname "$XWWW")"
 cat > "$XWWW" <<'WB'
@@ -126,8 +113,8 @@ for a in "$@"; do
     *) flags+=("$a") ;;
   esac
 done
-exec env WEBKIT_FORCE_SANDBOX=0 WEBKIT_DISABLE_COMPOSITING_MODE=1 \
-  /opt/apps/web/AppRun "${flags[@]}"
+exec env MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 \
+  /opt/apps/firefox/AppRun "${flags[@]}"
 WB
 chmod +x "$XWWW"
 

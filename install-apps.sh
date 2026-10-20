@@ -17,5 +17,5 @@ install_appimage() {
 }
 
 mkdir -p /opt/apps
-install_appimage web "https://github.com/pkgforge-dev/Gnome-Web-AppImage/releases/download/50.6-1%402026-10-01_1790876094/Web-50.6-1-anylinux-x86_64.AppImage"
+install_appimage firefox "https://github.com/pkgforge-dev/Firefox-AppImage/releases/download/158.0%402026-10-13_1791907872/Firefox-158.0-anylinux-x86_64.AppImage"
 echo "apps installed"
