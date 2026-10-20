@@ -155,6 +155,90 @@ BK
 chmod +x "$BIN_DIR/desktop-backup"
 
 # ---------------------------------------------------------------------------
+# 3b. Encrypted save profiles: password-protected archives that live on the
+#     same desktop-data branch, so they sync between codespaces - including
+#     codespaces run by different users. Only ciphertext is committed; the
+#     passphrase is read from the terminal by 'age' and never stored, logged,
+#     or sent anywhere. age derives the key with scrypt (N=2^18, ~256MB RAM
+#     per guess, ~1s) - brute-forcing is infeasible for any long passphrase.
+# ---------------------------------------------------------------------------
+cat > "$BIN_DIR/desktop-profile" <<'PR'
+#!/usr/bin/env bash
+set -e
+DATA_DIR="${DESKTOP_DATA_DIR:-/workspaces/desktop-data}"
+PROF_DIR="$DATA_DIR/profiles"
+ACTION="${1:-}"
+cd "$DATA_DIR"
+
+case "$ACTION" in
+  list)
+    if ls "$PROF_DIR"/*.age >/dev/null 2>&1; then
+      ls -1 "$PROF_DIR"/*.age | sed 's|.*/||;s|\.tar\.gz\.age$||'
+    else
+      echo "(no encrypted profiles saved yet)"
+    fi
+    ;;
+  save)
+    NAME="${2:-${GITHUB_USER:-}}"
+    while [ -z "$NAME" ]; do read -rp "Profile name: " NAME; done
+    # keep the name filesystem- and git-safe
+    NAME=$(printf '%s' "$NAME" | tr -c 'a-zA-Z0-9._-' '-' | cut -c1-40)
+    [ -n "$NAME" ] && [ "$NAME" != "." ] && [ "$NAME" != ".." ] || { echo "Invalid profile name." >&2; exit 1; }
+    mkdir -p "$PROF_DIR"
+    echo "This encrypts ~/Files plus the browser profile (bookmarks, game saves)"
+    echo "and pushes ONLY the ciphertext to GitHub. Use a LONG passphrase - it is"
+    echo "never stored anywhere; if you forget it, the profile is unrecoverable."
+    tar -czf - --ignore-failed-read \
+        --exclude='*/cache2' --exclude='*/startupCache' \
+        --exclude='*/cache2/*' --exclude='*/startupCache/*' \
+        files private/mozilla \
+        2>/dev/null | age -p -o "$PROF_DIR/$NAME.tar.gz.age"
+    git add -A -- profiles/
+    if ! git diff --cached --quiet; then
+      git commit -qm "encrypted profile: $NAME ($(date -u +%Y-%m-%d_%H:%M))"
+    fi
+    if git push -q origin desktop-data 2>/tmp/profile-push.err; then
+      echo "Profile '$NAME' saved (encrypted) and pushed to GitHub."
+    else
+      echo "Push to GitHub FAILED:" >&2
+      head -3 /tmp/profile-push.err >&2
+      echo "The encrypted profile is committed locally - run this again later to retry." >&2
+      exit 1
+    fi
+    ;;
+  restore)
+    NAME="${2:-}"
+    if [ -z "$NAME" ]; then
+      echo "Saved profiles:"
+      "$0" list
+      read -rp "Profile to restore: " NAME
+    fi
+    F="$PROF_DIR/$NAME.tar.gz.age"
+    [ -f "$F" ] || { echo "No profile '$NAME'. Try 'desktop-profile list'." >&2; exit 1; }
+    TMP="$(mktemp -d)"
+    # age reads the passphrase from the terminal and writes nothing on a
+    # wrong one, so a failed decrypt leaves the desktop untouched.
+    if ! age -d -o "$TMP/profile.tar.gz" "$F" 2>/tmp/profile-dec.err; then
+      rm -rf "$TMP"
+      echo "Restore FAILED - wrong password or corrupted profile:" >&2
+      grep -i "passphrase\|error" /tmp/profile-dec.err | head -1 >&2
+      exit 1
+    fi
+    tar -xzf "$TMP/profile.tar.gz" -C "$DATA_DIR"
+    rm -rf "$TMP"
+    echo "Profile '$NAME' restored to ~/Files and the browser (reopen apps to see it)."
+    ;;
+  *)
+    echo "Usage: desktop-profile save [name]    encrypt ~/Files + browser data, push"
+    echo "       desktop-profile restore [name]  decrypt a profile into this codespace"
+    echo "       desktop-profile list            show saved profiles"
+    exit 1
+    ;;
+esac
+PR
+chmod +x "$BIN_DIR/desktop-profile"
+
+# ---------------------------------------------------------------------------
 # 4. Desktop menu entries (managed block: replaced wholesale on every run,
 #    so upgrades add entries without duplicating old ones)
 # ---------------------------------------------------------------------------
@@ -162,7 +246,7 @@ MENU="$HOMEDIR/.fluxbox/menu"
 if [ -f "$MENU" ]; then
   awk -v home="$HOMEDIR" -v fluxdir="$HOMEDIR/.fluxbox" '
     BEGIN {
-      block = "# >>> desktop-apps >>>\n[exec] (Run Program...) {fbrun}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Keyboard Shortcuts) {mousepad " fluxdir "/SHORTCUTS}\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[restart] (Apply Desktop Updates) {}\n# <<< desktop-apps <<<"
+      block = "# >>> desktop-apps >>>\n[exec] (Run Program...) {fbrun}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Keyboard Shortcuts) {mousepad " fluxdir "/SHORTCUTS}\n[submenu] (Encrypted Profiles) {}\n[exec] (Save Profile) {tilix -t \"Save Profile\" -e desktop-profile save}\n[exec] (Restore Profile) {tilix -t \"Restore Profile\" -e desktop-profile restore}\n[exec] (List Profiles) {tilix -t \"Profiles\" -e desktop-profile list}\n[end]\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[restart] (Apply Desktop Updates) {}\n# <<< desktop-apps <<<"
       inblock = 0
     }
     /^# >>> desktop-apps >>>/ { inblock = 1; next }

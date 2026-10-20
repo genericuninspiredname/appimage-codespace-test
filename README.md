@@ -65,6 +65,38 @@ repo and pushes it to GitHub. A fresh codespace restores those files
 automatically on creation. Backups include only your documents in `~/Files` —
 browser profiles and credentials are deliberately never pushed.
 
+## Encrypted profiles (password-protected saves)
+
+For data you want to keep **private from the repository** - and to carry saves
+between codespaces run by **different users** - use the menu's **Encrypted
+Profiles** submenu (or `desktop-profile` in a terminal):
+
+- **Save Profile** packs `~/Files` plus the browser profile (bookmarks, game
+  saves - e.g. PokéRogue), encrypts it with your passphrase, and pushes only
+  the ciphertext to the same `desktop-data` branch.
+- **Restore Profile** decrypts a profile into the current codespace - from any
+  codespace of this repo, by any user who knows the passphrase. A wrong
+  passphrase restores nothing.
+- Each profile is independent: `profiles/<name>.tar.gz.age`, one passphrase
+  each. The default profile name is your GitHub login, so different users
+  don't collide.
+
+Security properties:
+
+- The passphrase is read from the terminal by `age` and never stored, logged,
+  or transmitted - the repository only ever receives ciphertext.
+- Keys are derived with scrypt (2^18 iterations, ~256 MB of RAM and ~1 second
+  per guess), so brute-forcing the encryption is infeasible. The real
+  protection is passphrase length: use a long passphrase (think a sentence,
+  not a word). If you forget it, the profile cannot be recovered by anyone.
+- Saving (pushing) requires write access to the repo; restoring works for
+  anyone who can read it and has the passphrase.
+
+Note: the plain **Back Up Files** path commits `~/Files` **unencrypted** -
+convenient, but readable by anyone with access to the repo. Use encrypted
+profiles for anything sensitive. Restoring a profile overwrites matching
+files in `~/Files` and the browser profile.
+
 **Editing files:** right-click → Text Editor (mousepad), or double-click files
 in the Files window. Save with Ctrl+S — files are written directly to the
 persistent folder.
