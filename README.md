@@ -28,11 +28,24 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
 ## Use the desktop
 
 - **Right-click the desktop** to open the Fluxbox menu: Web Browser, File
-  Manager, Text Editor, Terminal, plus **Files** (your persistent folder) and
-  **Back Up Files**.
-- The taskbar at the bottom shows running apps; the desktop supports multiple workspaces.
+  Manager, Text Editor, Terminal, **Run Program...**, plus **Files** (your
+  persistent folder), **Keyboard Shortcuts**, and **Back Up Files**.
+- **Taskbar** (bottom): workspace name and arrows on the left, running windows
+  in the middle (click one to focus or restore it), window-switch arrows and
+  the clock on the right. Scrolling the taskbar or the desktop also cycles
+  windows/workspaces.
+- **Workspaces:** 4 by default. Switch with the taskbar arrows, Ctrl+Alt+Left/
+  Right, Alt+1..4, or scrolling the desktop.
+- **Window switching:** Alt+Tab works with a native VNC client, but the browser
+  or OS usually swallows it when you're in the noVNC tab — **Alt+`**
+  (backtick) is an alternative that is usually not intercepted. The menu's
+  **Keyboard Shortcuts** entry lists everything.
 - **Resolution:** right-click → System → Set Resolution (the default is
   1280x800). Fewer pixels = snappier.
+- **After a rebuild:** the desktop may have started before setup applied
+  desktop tweaks — right-click → **Apply Desktop Updates** (or stop and start
+  the codespace) to refresh the taskbar, wallpaper, and shortcuts without
+  closing your windows.
 
 ## Files and persistence
 
@@ -63,6 +76,16 @@ they persist across rebuilds but not across codespace deletion.
 
 - Rendering is software-only (no GPU). Firefox is a full browser on a
   CPU-rendered desktop — browsing is fine, video playback is watchable but not silky.
+- **WebGL** is rendered in software by the CPU (software Mesa inside the
+  Firefox AppImage — no GPU involved). Check with
+  [get.webgl.org](https://get.webgl.org/): you should see the spinning cube.
+  The setup force-enables WebGL in the Firefox profile (`user.js`:
+  `webgl.force-enabled`) so blocklist entries for software renderers can't
+  silently turn it off. If your codespace was created before the switch to
+  Firefox (the browser used to be Chromium-based Helium, where software WebGL
+  was blocked), **rebuild the container** so the current image is used.
+  Heavy 3D sites are CPU-bound: on the 2-core machine they can be slow; a
+  4-core machine or a lower resolution helps.
 - Firefox runs with its content-process sandbox disabled
   (`MOZ_DISABLE_CONTENT_SANDBOX=1`) because Codespaces blocks the kernel
   feature (user namespaces) it requires. Firefox shows an orange

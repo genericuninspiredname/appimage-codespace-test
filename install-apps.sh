@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 set -e
+
+# System software OpenGL (llvmpipe) for apps that link system Mesa instead
+# of bundling their own, plus feh to set the desktop wallpaper. The Firefox
+# AppImage ships its own Mesa, so this is mostly for other apps and for
+# `glxinfo -B` diagnostics.
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq --no-install-recommends \
+  libgl1-mesa-dri libegl-mesa0 libglx-mesa0 feh
+rm -rf /var/lib/apt/lists/*
+
 install_appimage() {
   local name="$1" url="$2"
   # pkgforge AppImages extract to AppDir with squashfs-root as a symlink to it,
