@@ -1,0 +1,6 @@
+{
+  "name": "AppImage GUI Test Lab",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "remoteUser": "root",
+  "postCreateCommand": "bash .devcontainer/setup.sh"
+}
