@@ -42,7 +42,7 @@ starting, and even container rebuilds, because it lives under `/workspaces`,
 which GitHub preserves across rebuilds (changes outside `/workspaces` are lost
 on rebuild) ([GitHub Docs](https://docs.github.com/en/codespaces/developing-in-a-codespace/rebuilding-the-container-in-a-codespace)).
 
-Browser bookmarks and settings persist the same way (GNOME Web's profile is
+Browser bookmarks and settings persist the same way (Firefox's profile is
 stored in the same persistent location), so a rebuild doesn't reset them.
 
 **Backups (survive codespace deletion):** deleting the codespace deletes its
