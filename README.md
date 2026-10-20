@@ -79,13 +79,15 @@ they persist across rebuilds but not across codespace deletion.
 - **WebGL** is rendered in software by the CPU (software Mesa inside the
   Firefox AppImage — no GPU involved). Check with
   [get.webgl.org](https://get.webgl.org/): you should see the spinning cube.
-  The setup force-enables WebGL in the Firefox profile (`user.js`:
+  Note: the desktop runs at **24-bit color** (`VNC_RESOLUTION` in
+  devcontainer.json is `1280x800x24`). Without the `x24` suffix the
+  desktop-lite feature silently starts the VNC display at 16-bit color,
+  which leaves Firefox with no usable GL visuals — games like PokéRogue
+  then abort with "Cannot create WebGL context". The setup also
+  force-enables WebGL in the Firefox profile (`user.js`:
   `webgl.force-enabled`) so blocklist entries for software renderers can't
-  silently turn it off. If your codespace was created before the switch to
-  Firefox (the browser used to be Chromium-based Helium, where software WebGL
-  was blocked), **rebuild the container** so the current image is used.
-  Heavy 3D sites are CPU-bound: on the 2-core machine they can be slow; a
-  4-core machine or a lower resolution helps.
+  silently turn it off. Heavy 3D sites are still CPU-bound: on the 2-core
+  machine they can be slow; a 4-core machine or a lower resolution helps.
 - Firefox runs with its content-process sandbox disabled
   (`MOZ_DISABLE_CONTENT_SANDBOX=1`) because Codespaces blocks the kernel
   feature (user namespaces) it requires. Firefox shows an orange
