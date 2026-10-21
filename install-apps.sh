@@ -66,12 +66,19 @@ if not candidates_rt or not candidates_gl:
 RT, GL = candidates_rt[0], candidates_gl[0]
 
 dest = "/usr/lib/x86_64-linux-gnu"
+# libdbus is excluded: its LIBDBUS_PRIVATE symbol versions are distro-
+# specific, and Ubuntu's dbus tools (dbus-daemon, dbus-run-session - used
+# by the desktop startup) break against the runtime's copy. Sober only
+# needs the public libdbus ABI, which Ubuntu's provides.
+EXCLUDE = ("libdbus-1",)
 replaced = 0
 # Replace ld.so LAST so the loader/libc pair never mismatches for long.
 # All steps run inside this one process, back to back.
 for srcdir in (RT, GL):
     for name in sorted(os.listdir(srcdir)):
         if name.startswith("ld-linux") or name == "ld.so":
+            continue
+        if name.startswith(EXCLUDE):
             continue
         src = os.path.join(srcdir, name)
         if os.path.isdir(src):
