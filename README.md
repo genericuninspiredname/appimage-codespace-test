@@ -148,6 +148,37 @@ they persist across rebuilds but not across codespace deletion.
 - Your local webcam/mic are not available inside the desktop — it's a remote
   view, not a web app.
 
+## Roblox
+
+The desktop ships with **Roblox** via [Sober](https://github.com/vinegarhq/sober)
+(the standard Linux Roblox runtime — it runs the Android client natively).
+
+- **Launch it:** right-click the desktop → **Roblox** (or run `roblox` in a
+  terminal).
+- **First run:** Sober shows a small window offering to install the Roblox
+  client — pick **Automatic** and wait for the download (~200 MB). Then log
+  in and open any experience from roblox.com.
+- **Smoothness:** rendering is CPU-only (Mesa llvmpipe), so it is tuned for
+  it — the preinstalled config forces OpenGL, caps texture quality and
+  grass, and runs Roblox's low-fidelity LODs. For best results:
+  - **4-core machine** (`gh codespace create -R ... -m standardLinux32gb`)
+    — the single biggest speed-up for Roblox;
+  - **lower the resolution** (right-click → System → Set Resolution —
+    1024x640 is a good balance);
+  - in-game, keep the graphics quality slider low; Roblox also auto-adjusts.
+- **Data persistence:** the Sober data dir (`~/.var/app/org.vinegarhq.Sober`)
+  is linked into the persistent `/workspaces/desktop-data` area, so your
+  Roblox install and login survive rebuilds.
+- **Sound:** the browser tab streams video only, so Roblox plays silently
+  (audio isn't carried through noVNC).
+
+Technical note: Sober is a Flatpak, but Codespaces blocks the kernel
+namespaces its sandbox needs — so the image installs the flatpak and
+overlays its runtime libraries (glibc included) onto the system, and the
+launcher runs the app binary directly. If Sober ever needs a manual config
+change, the file is `~/.var/app/org.vinegarhq.Sober/config/sober/config.json`
+(delete it to reset to defaults).
+
 ## Making it faster
 
 - **Use a 4-core machine** (`-m standardLinux32gb` when creating, or change

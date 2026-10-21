@@ -91,6 +91,8 @@ link_dir() { # link_dir <src> <dest> [migrate]
 
 link_dir "$HOMEDIR/Files"                     "$DATA_DIR/files" 1
 link_dir "$HOMEDIR/.mozilla"                   "$DATA_DIR/private/mozilla"
+# Roblox/Sober data (client downloads, login, settings) survives rebuilds
+link_dir "$HOMEDIR/.var/app/org.vinegarhq.Sober"  "$DATA_DIR/private/sober"
 link_dir "$HOMEDIR/.fluxbox"                  "$DATA_DIR/private/fluxbox"
 
 # Codespaces blocks unshare/userns; skip the pkgforge AppImage namespaces
@@ -117,6 +119,56 @@ exec env MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 \
   /opt/apps/firefox/AppRun "${flags[@]}"
 WB
 chmod +x "$XWWW"
+
+# ---------------------------------------------------------------------------
+# 2b. Roblox (Sober) launcher + first-run config. The image build installs
+#     Sober and overlays its runtime libraries, so the app binary runs
+#     directly (flatpak's sandbox cannot work in Codespaces). The launcher
+#     just points it at the desktop display; data lives in the persistent
+#     ~/.var/app dir linked above.
+# ---------------------------------------------------------------------------
+SOBER_BIN=/var/lib/flatpak/app/org.vinegarhq.Sober/current/active/files/bin/sober
+cat > "$BIN_DIR/roblox" <<'RB'
+#!/bin/bash
+# Roblox (Sober) - launched from the desktop menu or a terminal.
+SOBER_BIN=/var/lib/flatpak/app/org.vinegarhq.Sober/current/active/files/bin/sober
+if [ ! -x "$SOBER_BIN" ]; then
+  echo "Roblox is not installed (run the container build/rebuild first)." >&2
+  exit 1
+fi
+export DISPLAY="${DISPLAY:-:1}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime}"
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+# Give the app its own session bus when the desktop has none (Sober uses
+# D-Bus for single-instance handling).
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/null 2>&1; then
+  exec dbus-run-session -- "$SOBER_BIN" "$@"
+fi
+exec "$SOBER_BIN" "$@"
+RB
+chmod +x "$BIN_DIR/roblox"
+
+# Tuned config for a software-rendered desktop (no GPU): force OpenGL
+# (llvmpipe) instead of Vulkan, keep HiDPI off, cap texture quality and
+# grass, and let Sober pick the lowest-fidelity LODs. Only written when
+# the user has no config yet - their settings always win.
+SOBER_CFG="$HOMEDIR/.var/app/org.vinegarhq.Sober/config/sober/config.json"
+if [ -x "$SOBER_BIN" ] && [ ! -f "$SOBER_CFG" ]; then
+  mkdir -p "$(dirname "$SOBER_CFG")"
+  cat > "$SOBER_CFG" <<'JSON'
+{
+  "use_opengl": true,
+  "enable_hidpi": false,
+  "touch_mode": "off",
+  "graphics_optimization_mode": "performance",
+  "fflags": {
+    "DFFlagTextureQualityOverrideEnabled": true,
+    "DFIntTextureQualityOverride": 1,
+    "FIntFRMMaxGrassDistance": 0
+  }
+}
+JSON
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Backup tool: explicitly backs up ~/Files (documents only, never
@@ -301,7 +353,7 @@ MENU="$HOMEDIR/.fluxbox/menu"
 if [ -f "$MENU" ]; then
   awk -v home="$HOMEDIR" -v fluxdir="$HOMEDIR/.fluxbox" '
     BEGIN {
-      block = "# >>> desktop-apps >>>\n[exec] (Run Program...) {fbrun}\n[exec] (Task Manager) {tilix -e htop}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Keyboard Shortcuts) {mousepad " fluxdir "/SHORTCUTS}\n[submenu] (Encrypted Profiles) {}\n[exec] (Save Profile) {tilix -t \"Save Profile\" -e desktop-profile save}\n[exec] (Restore Profile) {tilix -t \"Restore Profile\" -e desktop-profile restore}\n[exec] (List Profiles) {tilix -t \"Profiles\" -e desktop-profile list}\n[end]\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[restart] (Apply Desktop Updates) {}\n# <<< desktop-apps <<<"
+      block = "# >>> desktop-apps >>>\n[exec] (Roblox) {roblox}\n[exec] (Run Program...) {fbrun}\n[exec] (Task Manager) {tilix -e htop}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Keyboard Shortcuts) {mousepad " fluxdir "/SHORTCUTS}\n[submenu] (Encrypted Profiles) {}\n[exec] (Save Profile) {tilix -t \"Save Profile\" -e desktop-profile save}\n[exec] (Restore Profile) {tilix -t \"Restore Profile\" -e desktop-profile restore}\n[exec] (List Profiles) {tilix -t \"Profiles\" -e desktop-profile list}\n[end]\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[restart] (Apply Desktop Updates) {}\n# <<< desktop-apps <<<"
       inblock = 0
     }
     /^# >>> desktop-apps >>>/ { inblock = 1; next }
