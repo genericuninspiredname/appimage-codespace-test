@@ -150,33 +150,63 @@ they persist across rebuilds but not across codespace deletion.
 
 ## Roblox
 
-The desktop ships with **Roblox** via [Sober](https://github.com/vinegarhq/sober)
-(the standard Linux Roblox runtime — it runs the Android client natively).
+**Status: blocked by Sober itself — the game client cannot run in any
+container.** The desktop ships with Roblox via
+[Sober](https://github.com/vinegarhq/sober) (the standard Linux Roblox
+runtime — it runs the Android client natively), and the launcher gets the
+app as far as it can go inside a Codespace: it runs as a dedicated non-root
+user with the Flatpak environment replicated, the window opens and the
+onboarding UI starts — then Sober's built-in anti-tamper kills the actual
+Roblox game client.
+
+This is not a bug in this repo and cannot be fixed here:
+
+- Sober's `libloader.so` (a closed-source anti-tamper layer) validates its
+  environment and deliberately crashes (a `UD2` trap with "FATAL:
+  Unrecognized Instruction") in **any** container or VM. Verified in this
+  Codespace **and** in an independent unprivileged container with a real
+  Flatpak sandbox, non-root user, no Docker seccomp filter, untraced —
+  same crash.
+- The Sober maintainers confirm this is intentional: crashes in "a virtual
+  machine, container, or anything else designed to automate gameplay" are
+  [expected behavior](https://github.com/vinegarhq/sober/issues/2475).
+- The exact check lives in obfuscated code and has not been publicly
+  identified; the game child also refuses to run as root (fixed here by the
+  dedicated `roblox` user) and anti-debug is built in (it `ptrace`s itself
+  to its supervisor, blocking debuggers).
+
+What still works: the launcher, the Sober window, and the onboarding UI.
+If Sober ever drops or relaxes the container check, this setup should work
+as originally intended — everything else (environment, user, display,
+persistence) is in place. Alternatives while it is blocked:
+
+- run Roblox on a real (non-container) Linux machine with Sober, or on
+  Windows/macOS/mobile;
+- a cloud gaming/streaming service (now.gg works from the desktop's
+  Firefox but has ads and was rejected for this repo);
+- a full VM with KVM elsewhere — note Codespaces has no `/dev/kvm`, and
+  QEMU without KVM is far too slow for a 3D game, so a VM inside a
+  Codespace is not viable.
 
 - **Launch it:** right-click the desktop → **Roblox** (or run `roblox` in a
-  terminal).
-- **First run:** Sober shows a small window offering to install the Roblox
-  client — pick **Automatic** and wait for the download (~200 MB). Then log
-  in and open any experience from roblox.com.
-- **Smoothness:** rendering is CPU-only (Mesa llvmpipe), so it is tuned for
-  it — the preinstalled config forces OpenGL, caps texture quality and
-  grass, and runs Roblox's low-fidelity LODs. For best results:
-  - **4-core machine** (`gh codespace create -R ... -m standardLinux32gb`)
-    — the single biggest speed-up for Roblox;
-  - **lower the resolution** (right-click → System → Set Resolution —
-    1024x640 is a good balance);
-  - in-game, keep the graphics quality slider low; Roblox also auto-adjusts.
-- **Data persistence:** the Sober data dir (`~/.var/app/org.vinegarhq.Sober`)
-  is linked into the persistent `/workspaces/desktop-data` area, so your
-  Roblox install and login survive rebuilds.
+  terminal). It runs as the dedicated `roblox` user (never root — Sober
+  refuses root), with the Flatpak sandbox environment replicated and its
+  own D-Bus session.
+- **Data persistence:** the Sober data dir
+  (`/home/roblox/.var/app/org.vinegarhq.Sober`) is linked into the
+  persistent `/workspaces/desktop-data` area, so any state survives
+  rebuilds.
 - **Sound:** the browser tab streams video only, so Roblox plays silently
   (audio isn't carried through noVNC).
 
 Technical note: Sober is a Flatpak, but Codespaces blocks the kernel
-namespaces its sandbox needs — so the image installs the flatpak and
-overlays its runtime libraries (glibc included) onto the system, and the
-launcher runs the app binary directly. If Sober ever needs a manual config
-change, the file is `~/.var/app/org.vinegarhq.Sober/config/sober/config.json`
+namespaces its sandbox needs — so the image installs the flatpak, overlays
+its runtime libraries (glibc included) onto the system, mirrors the app
+tree to a real `/app` directory (the anti-tamper checks `/proc/self/exe`),
+and the launcher runs the app binary directly as the `roblox` user with the
+flatpak environment variables set. If Sober ever needs a manual config
+change, the file is
+`/home/roblox/.var/app/org.vinegarhq.Sober/config/sober/config.json`
 (delete it to reset to defaults).
 
 ## Making it faster
