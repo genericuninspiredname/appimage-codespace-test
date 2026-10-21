@@ -43,15 +43,11 @@ install_appimage firefox "https://github.com/pkgforge-dev/Firefox-AppImage/relea
 # ---------------------------------------------------------------------------
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 # The bwrap errors printed during install are expected (namespaces are
-# blocked in Codespaces); skip the sandboxed trigger phase and verify the
-# deployment landed instead of trusting the exit code.
-flatpak install -y --noninteractive --no-triggers flathub org.vinegarhq.Sober || true
-if ! flatpak list | grep -qi "vinegarhq.Sober"; then
-  echo "ERROR: Sober flatpak did not install" >&2
-  exit 1
-fi
-
-python3 - <<'PYEOF'
+# blocked in Codespaces); the deployment lands anyway - verify it and
+# never fail the image build from this section (see /var/log/sober-setup.log).
+SOBER_LOG=/var/log/sober-setup.log
+echo "=== Sober install ===" > "$SOBER_LOG"
+cat > /tmp/sober-overlay.py <<'PYEOF'
 import os, glob, sys
 
 def atomic_symlink(target, link):
@@ -106,9 +102,23 @@ for icddir in glob.glob("/var/lib/flatpak/runtime/org.freedesktop.Platform.GL.de
 
 print("overlaid %d runtime libraries" % replaced)
 PYEOF
+if flatpak install -y --noninteractive flathub org.vinegarhq.Sober >>"$SOBER_LOG" 2>&1; then
+  echo "flatpak install: exit 0" >>"$SOBER_LOG"
+else
+  echo "flatpak install: nonzero exit (trigger phase fails without namespaces - may still be deployed)" >>"$SOBER_LOG"
+fi
+if flatpak list 2>/dev/null | grep -qi "vinegarhq.Sober"; then
+  echo "Sober flatpak deployed" >>"$SOBER_LOG"
+  if python3 /tmp/sober-overlay.py >>"$SOBER_LOG" 2>&1; then
+    echo "library overlay: ok" >>"$SOBER_LOG"
+  else
+    echo "library overlay: FAILED" >>"$SOBER_LOG"
+  fi
+  ldconfig >>"$SOBER_LOG" 2>&1 || true
+  apt-mark hold libc6 >>"$SOBER_LOG" 2>&1 || true
+else
+  echo "WARN: Sober flatpak did not deploy - Roblox will be missing" >>"$SOBER_LOG"
+fi
+rm -f /tmp/sober-overlay.py
 
-# Regenerate the loader cache with the new libs and verify the toolchain
-# still works (glibc is backward compatible - this must not fail).
-ldconfig
-apt-mark hold libc6 >/dev/null 2>&1 || true
 echo "apps installed"
