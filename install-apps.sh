@@ -109,6 +109,20 @@ for icddir in glob.glob("/var/lib/flatpak/runtime/org.freedesktop.Platform.GL.de
     for name in os.listdir(icddir):
         atomic_symlink(os.path.join(icddir, name), os.path.join("/usr/share/vulkan/icd.d", name))
 
+# Fedora's TLS stack (the runtime's libcurl/openssl) looks for Fedora's CA
+# bundle paths; point them at Ubuntu's certificates so downloads verify.
+if os.path.exists("/etc/ssl/certs/ca-certificates.crt"):
+    for p in ("/etc/pki/tls/certs/ca-bundle.crt",
+              "/etc/pki/tls/certs/ca-bundle.trust.crt",
+              "/etc/pki/tls/cert.pem",
+              "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"):
+        try:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            if not os.path.exists(p):
+                atomic_symlink("/etc/ssl/certs/ca-certificates.crt", p)
+        except Exception:
+            pass
+
 print("overlaid %d runtime libraries" % replaced)
 PYEOF
 if flatpak install -y --noninteractive flathub org.vinegarhq.Sober >>"$SOBER_LOG" 2>&1; then
