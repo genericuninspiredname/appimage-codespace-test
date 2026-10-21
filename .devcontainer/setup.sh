@@ -362,6 +362,11 @@ chmod +x "$BIN_DIR/desktop-profile"
 #    so upgrades add entries without duplicating old ones)
 # ---------------------------------------------------------------------------
 MENU="$HOMEDIR/.fluxbox/menu"
+# Codespaces' clone can be owned by a different uid after rebuilds; stop
+# git's dubious-ownership check from breaking pulls on the working dir.
+git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
+git config --global --add safe.directory /workspaces/appimage-codespace-test 2>/dev/null || true
+
 if [ -f "$MENU" ]; then
   awk -v home="$HOMEDIR" -v fluxdir="$HOMEDIR/.fluxbox" '
     BEGIN {
