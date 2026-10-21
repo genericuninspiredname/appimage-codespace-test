@@ -95,6 +95,17 @@ link_dir "$HOMEDIR/.mozilla"                   "$DATA_DIR/private/mozilla"
 link_dir "$HOMEDIR/.var/app/org.vinegarhq.Sober"  "$DATA_DIR/private/sober"
 link_dir "$HOMEDIR/.fluxbox"                  "$DATA_DIR/private/fluxbox"
 
+# ---------------------------------------------------------------------------
+# 1b. Sober runtime library overlay. The image build installs Sober
+#     (flatpak) and writes the overlay script; it must run AFTER the
+#     devcontainer features (which apt-install packages that overwrite
+#     the overlaid files), i.e. here on every create/start. Idempotent.
+# ---------------------------------------------------------------------------
+if [ -f /usr/local/share/sober-overlay.py ]; then
+  python3 /usr/local/share/sober-overlay.py >/dev/null 2>&1 || true
+  ldconfig 2>/dev/null || true
+fi
+
 # Codespaces blocks unshare/userns; skip the pkgforge AppImage namespaces
 # check so Firefox (and other pkgforge apps) launch without a dialog.
 mkdir -p "$HOMEDIR/.cache"
@@ -139,6 +150,7 @@ fi
 export DISPLAY="${DISPLAY:-:1}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime}"
 mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
 # Give the app its own session bus when the desktop has none (Sober uses
 # D-Bus for single-instance handling).
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/null 2>&1; then

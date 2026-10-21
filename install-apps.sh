@@ -45,9 +45,11 @@ flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.f
 # The bwrap errors printed during install are expected (namespaces are
 # blocked in Codespaces); the deployment lands anyway - verify it and
 # never fail the image build from this section (see /var/log/sober-setup.log).
+# The overlay script is written to /usr/local/share and executed by setup.sh.
 SOBER_LOG=/var/log/sober-setup.log
 echo "=== Sober install ===" > "$SOBER_LOG"
-cat > /tmp/sober-overlay.py <<'PYEOF'
+mkdir -p /usr/local/share
+cat > /usr/local/share/sober-overlay.py <<'PYEOF'
 import os, glob, sys
 
 def atomic_symlink(target, link):
@@ -116,16 +118,14 @@ else
 fi
 if flatpak list 2>/dev/null | grep -qi "vinegarhq.Sober"; then
   echo "Sober flatpak deployed" >>"$SOBER_LOG"
-  if python3 /tmp/sober-overlay.py >>"$SOBER_LOG" 2>&1; then
-    echo "library overlay: ok" >>"$SOBER_LOG"
-  else
-    echo "library overlay: FAILED" >>"$SOBER_LOG"
-  fi
-  ldconfig >>"$SOBER_LOG" 2>&1 || true
+  # The overlay itself runs from setup.sh on every start: devcontainer
+  # features apt-install packages AFTER this build step and would
+  # overwrite the overlaid files (e.g. libmount).
+  echo "library overlay script: /usr/local/share/sober-overlay.py" >>"$SOBER_LOG"
   apt-mark hold libc6 >>"$SOBER_LOG" 2>&1 || true
 else
   echo "WARN: Sober flatpak did not deploy - Roblox will be missing" >>"$SOBER_LOG"
 fi
-rm -f /tmp/sober-overlay.py
+
 
 echo "apps installed"
