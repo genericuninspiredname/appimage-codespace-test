@@ -8,7 +8,7 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
-  libgl1-mesa-dri libegl-mesa0 libglx-mesa0 htop age flatpak
+  libgl1-mesa-dri libegl-mesa0 libglx-mesa0 htop age flatpak python3
 rm -rf /var/lib/apt/lists/*
 
 install_appimage() {
