@@ -250,3 +250,35 @@ setup marks it disabled. Other AppImages may need
   (even stopped). Stop when done for the day; delete when done for good.
 - Deleting a codespace does not touch the repo — you can always create a new one
   (and **Back Up Files** restores your documents).
+
+## Repository layout (setup architecture)
+
+`.devcontainer/setup.sh` is only a **coordinator**: it sets up the shared
+environment, then sources the modules in `.devcontainer/modules/` in
+lexical order:
+
+| Module | Responsibility |
+|--------|----------------|
+| `10-persistence.sh` | Persistent data dir, home symlinks, `desktop-backup` |
+| `20-browser.sh` | Browser launcher, WebGL prefs, namespaces-check flag |
+| `30-roblox.sh` | Optional Roblox/Sober setup (image-dependent steps guarded; user, links and launchers always installed) |
+| `40-profiles.sh` | Encrypted save profiles (`desktop-profile`) |
+| `50-menu.sh` | Fluxbox desktop menu entries |
+| `60-fluxbox.sh` | Wallpaper, init, style overlay, keys, shortcuts |
+| `70-diagnostics.sh` | git safe.directory fix, reapply to a running desktop |
+
+After the modules it runs **lifecycle hooks** (see
+`.devcontainer/hooks/README.md`):
+
+- `hooks/first-start.d/` — once per codespace (creation)
+- `hooks/normal-start.d/` — every start, including after rebuilds
+
+Codespaces passes the mode explicitly (`postCreateCommand` →
+`first-start`, `postStartCommand` → `normal-start`); a manual
+`bash .devcontainer/setup.sh` infers it from the persisted marker
+`$DATA_DIR/.first-start-complete`.
+
+**Feature branches:** add a new numbered module or a hook script instead
+of editing existing files — that is the whole point of this layout, it
+keeps merges conflict-free. `tests/idempotence-test.sh` verifies setup
+is safe to run repeatedly; run it after changing anything here.

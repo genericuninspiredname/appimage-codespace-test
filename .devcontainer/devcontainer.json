@@ -24,7 +24,7 @@
       "onAutoForward": "openBrowser"
     }
   },
-  "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bash .devcontainer/setup.sh",
+  "postCreateCommand": "bash .devcontainer/setup.sh first-start",
+  "postStartCommand": "bash .devcontainer/setup.sh normal-start",
   "remoteUser": "root"
 }
