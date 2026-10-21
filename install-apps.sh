@@ -41,10 +41,15 @@ install_appimage firefox "https://github.com/pkgforge-dev/Firefox-AppImage/relea
 # compatible, so every Ubuntu binary keeps working; Sober's launcher,
 # which is built against the runtime, now runs directly with no sandbox.
 # ---------------------------------------------------------------------------
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 # The bwrap errors printed during install are expected (namespaces are
-# blocked in Codespaces); the deployment itself completes.
-flatpak install -y --noninteractive flathub org.vinegarhq.Sober || flatpak list | grep -qi sober
+# blocked in Codespaces); skip the sandboxed trigger phase and verify the
+# deployment landed instead of trusting the exit code.
+flatpak install -y --noninteractive --no-triggers flathub org.vinegarhq.Sober || true
+if ! flatpak list | grep -qi "vinegarhq.Sober"; then
+  echo "ERROR: Sober flatpak did not install" >&2
+  exit 1
+fi
 
 python3 - <<'PYEOF'
 import os, glob, sys
@@ -75,7 +80,11 @@ for srcdir in (RT, GL):
         src = os.path.join(srcdir, name)
         if os.path.isdir(src):
             # whole dirs from the GL extension: dri drivers, gbm, etc.
-            atomic_symlink(src, os.path.join(dest, name))
+            dst = os.path.join(dest, name)
+            if os.path.isdir(dst) and not os.path.islink(dst):
+                import shutil
+                shutil.rmtree(dst)
+            atomic_symlink(src, dst)
             replaced += 1
         elif os.path.isfile(src) or os.path.islink(src):
             # real files and soname symlinks (they resolve in place)
