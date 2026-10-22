@@ -71,6 +71,10 @@ run_setup() { # run_setup <mode>
     export DESKTOP_XWWW="'"$WORK"'/xwww-dir/x-www-browser"
     export DESKTOP_REPO_DIR="'"$REPO_SRC"'"
     export DESKTOP_REMOTE_URL="file://'"$WORK"'/origin.git"
+    # 05-startup-gates.sh mkdirs its default stamp dir under /var/lib,
+    # which is not writable inside the unshare fixture (and outside it
+    # would touch the host) - use its documented test override
+    export DESKTOP_STAMP_DIR="'"$WORK"'/stamps"
     bash "'"$WORK"'/dc/setup.sh" '"${mode:+$mode}"'
   '
   if [ "$ISOLATED" = 1 ]; then

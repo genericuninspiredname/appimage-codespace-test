@@ -94,6 +94,10 @@ run_setup() { # run_setup <fixture-root> <mode>
     export DESKTOP_REPO_DIR="'"$REPO_SRC"'"
     export DESKTOP_REMOTE_URL="file://'"$WORK"'/origin.git"
     export DESKTOP_WELCOME_MAX_WAIT=1
+    # 05-startup-gates.sh mkdirs its default stamp dir under /var/lib,
+    # which is not writable inside the unshare fixture (and outside it
+    # would touch the host) - use its documented test override
+    export DESKTOP_STAMP_DIR="'"$WORK"'/stamps"
     # isolate the fixture welcome from the host it runs on: its own lock and
     # log (the hook writes DESKTOP_WELCOME_LOG), and no X display at all.
     # A failing xdpyinfo stub in PATH makes find_display fail even when the
