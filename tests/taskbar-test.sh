@@ -92,7 +92,18 @@ FLUX="$WORK/data/private/fluxbox"
 count() { grep -c "^# >>> $1 >>>" "$2"; }
 [ "$(count taskbar-switch-overlay "$FLUX/overlay")" = 1 ] || fail "overlay block not exactly once"
 [ "$(count taskbar-switch-keys "$FLUX/keys")" = 1 ] || fail "keys block not exactly once"
+[ "$(count taskbar-switch-init "$FLUX/init")" = 1 ] || fail "init block not exactly once"
 [ "$(count taskbar-switch-shortcuts "$FLUX/SHORTCUTS")" = 1 ] || fail "SHORTCUTS block not exactly once"
+
+# --- init additions: iconbar pattern + remote actions -----------------------
+grep -q '^session.screen0.iconbar.mode: {static groups} (workspace)$' "$FLUX/init" \
+  || fail "iconbar window-pattern mode missing"
+grep -q '^session.screen0.allowRemoteActions: true$' "$FLUX/init" \
+  || fail "allowRemoteActions missing"
+# the init block must come AFTER 60-fluxbox.sh's block (last-wins)
+[ "$(grep -n '^# >>> desktop-init >>>' "$FLUX/init" | cut -d: -f1)" \
+  -lt "$(grep -n '^# >>> taskbar-switch-init >>>' "$FLUX/init" | cut -d: -f1)" ] \
+  || fail "taskbar-switch-init block must follow the desktop-init block"
 
 # --- taskbar readability ----------------------------------------------------
 grep -qx '\*.font: sans-10' "$FLUX/overlay" || fail "readable taskbar font missing"

@@ -30,10 +30,10 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
 - **Right-click the desktop** to open the Fluxbox menu: Web Browser, File
   Manager, Text Editor, Terminal, **Run Program...**, plus **Files** (your
   persistent folder), **Keyboard Shortcuts**, and **Back Up Files**.
-- **Taskbar** (bottom): workspace name and arrows on the left, running windows
-  in the middle (click one to focus or restore it), window-switch arrows and
-  the clock on the right. Scrolling the taskbar or the desktop also cycles
-  windows/workspaces.
+- **Taskbar** (bottom): workspace name and arrows on the left, the current
+  workspace's running windows in the middle (click one to focus or restore
+  it), window-switch arrows and the clock on the right. Scrolling the taskbar
+  or the desktop also cycles windows/workspaces.
 - **Workspaces:** 4 by default. Switch with the taskbar arrows, Ctrl+Alt+Left/
   Right, Alt+1..4, or scrolling the desktop.
 - **Window switching:** Alt+Tab works with a native VNC client, but the browser

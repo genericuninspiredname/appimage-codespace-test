@@ -23,10 +23,19 @@ module instead of edits to shared ones):
     `Ctrl+Alt+Shift+Left/Right` → send the active window to the prev/next
     workspace. Browsers pass Ctrl+Alt+arrows through to noVNC (unlike
     Alt+Tab), so these are reliable in a browser session.
+  - `~/.fluxbox/init`: the iconbar mode is set to its window-pattern form
+    `{static groups} (workspace)` — the bare word `Workspace` is not a valid
+    pattern, so fluxbox showed windows from ALL workspaces in the taskbar,
+    which made workspace switching muddy; with the pattern the taskbar shows
+    only the current workspace's windows. Also `allowRemoteActions: true`
+    so `fluxbox-remote restart` actually works — without it the config
+    re-apply that setup performs on every start (70-diagnostics.sh) was
+    silently ignored, and taskbar/key changes only took effect after a full
+    codespace stop/start.
   - `~/.fluxbox/SHORTCUTS`: documents the new bindings (the block is
     re-appended after 60's rewrite on every setup run).
 
-Existing `Alt+\`` window cycling, `Alt+1..4` workspace jumps and the whole
+Existing `Alt+`` window cycling, `Alt+1..4` workspace jumps and the whole
 desktop menu from earlier work are preserved unchanged.
 
 ## Testing
@@ -34,18 +43,28 @@ desktop menu from earlier work are preserved unchanged.
 - `tests/idempotence-test.sh` (unchanged) — passes with the new module in
   place: 4 setup runs leave state byte-identical; managed blocks appear
   exactly once; user edits to the keys/menu files survive.
-- New `tests/taskbar-test.sh` — runs the coordinator twice and verifies the
-  generated fluxbox files: new managed blocks exactly once, the font size,
-  the focus/unfocus colors, the key bindings, and that the earlier menu /
-  keys / overlay blocks survive.
-- Codespace test on branch `ui/taskbar-and-window-switching`: desktop
-  started, several windows opened across two workspaces; verified via
-  screenshots that the taskbar is readable, the active window's titlebar and
-  taskbar button are blue while inactive ones are grey, workspace switching
-  via taskbar arrows and Ctrl+Alt+Left/Right works, and Alt+` cycles
-  windows. noVNC on port 6080 serving. Re-ran setup (normal-start) and
-  confirmed the config blocks are not duplicated and the desktop survives a
-  fluxbox restart.
+- `tests/taskbar-test.sh` — runs the coordinator twice and verifies the
+  generated fluxbox files: new managed blocks (overlay/keys/init/SHORTCUTS)
+  exactly once, the font size, the focus/unfocus colors, the key bindings,
+  the iconbar pattern and allowRemoteActions in init, and that the earlier
+  menu / keys / overlay blocks survive.
+- `tests/codespace-verify.sh` — run inside the Codespace on this branch
+  (it installs xdotool itself if missing and accepts both Xvnc and
+  Xtigervnc). It checks the generated config, opens several windows
+  (Mousepad, terminal, file manager) and verifies through the X server —
+  the same input path noVNC's websocket keyboard events feed — that
+  Alt+` cycles windows, Ctrl+Alt+Left/Right switches workspaces,
+  Ctrl+Alt+Shift+arrows move the active window between workspaces, the
+  root menu is still bound, a repeat `setup.sh normal-start` run is
+  idempotent (config byte-identical), and `fluxbox-remote restart` keeps
+  every window open.
+- Visual verification via screenshots inside the Codespace: with several
+  windows open the taskbar labels are readable, the focused window's
+  titlebar and taskbar button are blue while inactive ones are dark grey,
+  the workspace name indicator updates on switching (Main → Web → Extra),
+  and with the iconbar fix the taskbar buttons follow the current
+  workspace (empty on a workspace with no windows). The desktop menu still
+  opens via right-click. noVNC on port 6080 serving.
 
 ## Limitations
 
@@ -53,3 +72,9 @@ desktop menu from earlier work are preserved unchanged.
   noVNC window-cycling key.
 - The font name `sans-10` resolves through fontconfig to the default
   sans-serif (DejaVu Sans in this image).
+- The key-injection tests go through the X server, which is the same input
+  path noVNC uses, but they cannot prove a specific browser passes every
+  combo (e.g. some browsers reserve Ctrl+Alt+arrows on some platforms).
+- TigerVNC's session opens a small "VNC config"/"xmessage" dialog pair on
+  each desktop start; they appear as taskbar buttons until closed. They
+  come from the VNC layer, not from this branch.

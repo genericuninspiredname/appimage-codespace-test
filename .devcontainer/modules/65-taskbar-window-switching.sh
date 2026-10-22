@@ -97,7 +97,25 @@ Control Mod1 Shift Right :SendToNextWorkspace
 # <<< taskbar-switch-keys <<<'
 set_block "$KEYS" taskbar-switch-keys "$keys_block"
 
-# --- 3. Shortcut cheat sheet: document the additions (60-fluxbox.sh rewrites
+# --- 3. init additions (managed block at the END of init: fluxbox keeps
+# the last occurrence of a duplicate resource, so these must come after both
+# the desktop-init block and any lines fluxbox itself appends when it saves):
+#   - iconbar.mode must be the window-pattern form '{static groups} (workspace)'.
+#     The bare word 'Workspace' (used by the desktop-init block) is not a
+#     valid pattern, and fluxbox falls back to showing windows from ALL
+#     workspaces in the taskbar, which makes workspace switching muddy.
+#   - allowRemoteActions lets 'fluxbox-remote restart' work, so setup can
+#     re-apply config to a running desktop (70-diagnostics.sh) and the
+#     taskbar/keys take effect immediately after a repeat setup run,
+#     without a full codespace restart.
+INIT="$FLUXDIR/init"
+init_block="# >>> taskbar-switch-init >>>
+session.screen0.iconbar.mode: {static groups} (workspace)
+session.screen0.allowRemoteActions: true
+# <<< taskbar-switch-init <<<"
+set_block "$INIT" taskbar-switch-init "$init_block"
+
+# --- 4. Shortcut cheat sheet: document the additions (60-fluxbox.sh rewrites
 # the whole file each run, then this block is re-appended after it, so the
 # sheet stays correct across repeat runs).
 SHORTCUTS="$FLUXDIR/SHORTCUTS"
