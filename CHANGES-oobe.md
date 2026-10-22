@@ -114,6 +114,42 @@ X display, shows the screen once, and exits — nothing keeps running.
   end with the label (GTK/GVFS warnings follow it on stderr). Both
   are covered by the hermetic regression tests now.
 
+## Re-verification at the final commit (second pass)
+
+The branch was re-audited and re-tested inside a live Codespace at the
+final commit; that pass found and fixed one real test bug:
+
+- **`tests/oobe-test.sh` was not hermetic on a host with a live desktop.**
+  Inside the Codespace (where the desktop is running on `:1`) the test
+  failed: the phase-1 fixture welcome found the real X display and
+  popped a real dialog on the host desktop (also holding the shared
+  `/tmp/desktop-welcome.lock`), and the phase-2 "no display"
+  assertions failed because `:1` was reachable. Root cause: Codespaces
+  forbids `unshare` (user namespaces), so the test's mount isolation
+  cannot run there, and `/tmp/.X11-unix` is shared with the host.
+  Fix: a failing `xdpyinfo` stub in the fixture `PATH` (no setup module
+  or hook other than 75-oobe.sh uses `xdpyinfo`) makes `find_display`
+  fail on every host; the fixture welcome also gets its own lock and
+  log via `DESKTOP_WELCOME_LOCK`/`DESKTOP_WELCOME_LOG`, and the hook
+  now honors `DESKTOP_WELCOME_LOG` (default unchanged:
+  `/tmp/desktop-welcome.log`) so test runs no longer clobber the host
+  welcome log. The fixed test passes in the sandbox AND twice inside the
+  live Codespace, leaving no stray dialogs, locks or markers.
+- Live GUI re-check inside the Codespace: first launch with a fresh
+  data dir auto-shows the dialog (screenshot-verified: environment,
+  CPU, memory, resolution, WebGL and backup lines all render cleanly);
+  Browser -> Firefox, Files -> nautilus on `~/Files`, WebGL Test ->
+  xterm with the honest GLX fallback (tilix is not usable as root,
+  xterm fallback as documented), Close -> dialog exits, marker written,
+  `/tmp` lock cleaned; `--auto` with the marker present skips
+  (`welcome already shown - skipping`); manual reopen always shows;
+  `--print` works; `setup.sh normal-start` repeat-run is clean.
+- Known, out-of-scope environment issue: `tests/idempotence-test.sh`
+  fails inside the live Codespace on this branch and on `master`
+  identically (steam fixture assertion; without `unshare` the steam
+  module operates on the real `/home` paths). Pre-existing and
+  unrelated to the OOBE; not fixed here to keep this branch scoped.
+
 ## Limitations
 - "Windows host" is detected from WSL kernel markers; an ordinary Linux
   host without evidence reads "unknown". No Windows host was available

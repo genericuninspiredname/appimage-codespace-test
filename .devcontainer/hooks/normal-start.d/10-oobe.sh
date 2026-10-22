@@ -8,6 +8,7 @@
 # detached so setup is never blocked by the display wait; a failed
 # launch writes no marker and is retried on the next start.
 [ -x "${BIN_DIR:-/usr/local/bin}/desktop-welcome" ] || exit 0
+# DESKTOP_WELCOME_LOG (test isolation) defaults to the shared runtime log.
 setsid "${BIN_DIR:-/usr/local/bin}/desktop-welcome" --auto \
-  </dev/null >/tmp/desktop-welcome.log 2>&1 &
+  </dev/null >"${DESKTOP_WELCOME_LOG:-/tmp/desktop-welcome.log}" 2>&1 &
 exit 0

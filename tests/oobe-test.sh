@@ -42,6 +42,9 @@ for cmd in useradd chown xhost; do
     > "$WORK/stub/$cmd"
   chmod +x "$WORK/stub/$cmd"
 done
+# never see the host's X display, even on a live desktop (see run_setup)
+printf '#!/bin/sh\nexit 1\n' > "$WORK/stub/xdpyinfo"
+chmod +x "$WORK/stub/xdpyinfo"
 cat > "$WORK/stub/id" <<'EOF'
 #!/bin/sh
 case " $* " in
@@ -91,6 +94,14 @@ run_setup() { # run_setup <fixture-root> <mode>
     export DESKTOP_REPO_DIR="'"$REPO_SRC"'"
     export DESKTOP_REMOTE_URL="file://'"$WORK"'/origin.git"
     export DESKTOP_WELCOME_MAX_WAIT=1
+    # isolate the fixture welcome from the host it runs on: its own lock and
+    # log (the hook writes DESKTOP_WELCOME_LOG), and no X display at all.
+    # A failing xdpyinfo stub in PATH makes find_display fail even when the
+    # host has a live desktop (Codespaces forbids unshare, so the tmpfs
+    # isolation below cannot be relied on there); no setup module or hook
+    # other than 75-oobe.sh uses xdpyinfo.
+    export DESKTOP_WELCOME_LOCK="'"$fx"'/welcome.lock"
+    export DESKTOP_WELCOME_LOG="'"$fx"'/welcome.log"
     bash "'"$WORK"'/dc/setup.sh" '"${mode:+$mode}"'
   '
   if [ "$ISOLATED" = 1 ]; then
@@ -180,6 +191,14 @@ STUB
   chmod +x "$FX/stub/zenity"
 }
 rm -f "$FX/stub/xdpyinfo" "$FX/stub/xmessage" "$FX/stub/glxinfo" "$FX/stub/desktop-doctor"
+# "no display" must not depend on the host having no X server: a failing
+# xdpyinfo stub makes find_display fail on every host (the socket fallback
+# branch only runs when xdpyinfo is absent from PATH entirely)
+no_display_stub() {
+  printf '#!/bin/sh\nexit 1\n' > "$FX/stub/xdpyinfo"
+  chmod +x "$FX/stub/xdpyinfo"
+}
+no_display_stub
 
 run_welcome() { # runs the installed script with fixture env + stub PATH
   env HOME="$FX/home" DESKTOP_DATA_DIR="$FX/data" \
@@ -231,6 +250,7 @@ out=$(DESKTOP_WELCOME_DISPLAY=:9 run_welcome --print)
 grep -q 'Screen:.*1024x768, 24-bit (display :9)' <<< "$out" || fail "resolution not picked up from xdpyinfo"
 grep -q 'GLX:.*software rendering (llvmpipe' <<< "$out" || fail "GLX software renderer not classified"
 rm -f "$FX/stub/xdpyinfo" "$FX/stub/glxinfo"
+no_display_stub
 
 # --- backup_status variants ----------------------------------------------------
 echo "  backup_status variants"
@@ -300,7 +320,8 @@ run_welcome --auto >/dev/null 2>&1 || fail "--auto failed with a stale lock"
 
 echo "  --auto: no display -> no dialog, no marker, exit non-zero"
 make_zenity_stub 0 1
-rm -f "$MARKER" "$FX/zenity.log" "$FX/zenity.count" "$FX/stub/xdpyinfo"
+rm -f "$MARKER" "$FX/zenity.log" "$FX/zenity.count"
+no_display_stub
 run_welcome --auto >/dev/null 2>&1 && fail "--auto succeeded without a display"
 [ -f "$FX/zenity.log" ] && fail "dialog shown without a display"
 [ -f "$MARKER" ] && fail "marker written without a display"
