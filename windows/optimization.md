@@ -22,7 +22,7 @@ recommendation cites where it comes from. See [setup.md](setup.md) first.
   playing — Roblox plus a heavy browser can exceed small-RAM machines.
 - **DirectX 10 feature level is the floor:** if the client complains, update
   the GPU driver or the GPU itself is below Roblox's documented
-  [minimum](https://en.help.roblox.com/hc/en-us/articles/206215488).
+  [minimum](https://en.help.roblox.com/hc/en-us/articles/203312800-Computer-Hardware-Operating-System-Requirements).
 
 ## In-game Roblox settings
 

@@ -22,9 +22,13 @@ account of what was verified inside the Codespace.
 
 Codespaces themselves run Linux only — GitHub documents that Windows and
 macOS are
-[not supported](https://docs.github.com/en/codespaces/developing-in-a-codespace/setting-your-user-preferences-for-codespaces#accessibility-settings)
+[not supported](https://docs.github.com/en/codespaces/overview)
 as the container OS — so "run Roblox inside the Codespace" is not a possible
-direction at all.
+direction at all. Roblox's own support pages likewise state that virtual
+machines and cloud computers are
+[not supported](https://en.help.roblox.com/hc/en-us/articles/36639955031060-Roblox-Error-Codes)
+platforms — a physical Windows host (or a hypervisor VM you assess at your
+own risk) is the supported direction.
 
 The practical answer for real Roblox gameplay is a **real Windows
 machine**: a physical PC you own, a second machine, or a Windows VM on
@@ -49,9 +53,9 @@ Keep it that way:
 
 - **Roblox data stays on the Windows host.** The Roblox launcher and player
   install and store their data under `%LOCALAPPDATA%\Roblox` (i.e.
-  `C:\Users\<name>\AppData\Local\Roblox`) on Windows — see the
-  [Launcher CLI docs](https://create.roblox.com/docs/studio/launcher-CLI)
-  for the launcher commands that operate on that install, and
+  `C:\Users\<name>\AppData\Local\Roblox`) on Windows — see Roblox's
+  [command-line interface docs](https://create.roblox.com/docs/studio/command-line-interface)
+  documenting the `%LOCALAPPDATA%\Roblox` install layout, and
   [Bloxstrap's documentation](https://github.com/bloxstraplabs/bloxstrap/wiki/)
   for the same layout. Nothing about this location has any relationship to
   the Codespace's `/workspaces` or the `desktop-data` branch.

@@ -16,7 +16,7 @@ encrypted tunnel or a direct connection you initiate.
 
 Windows 10/11 **Pro** can host a native RDP server ("Remote Desktop");
 **Windows Home cannot host RDP** — Microsoft documents how to
-[enable and use Remote Desktop](https://support.microsoft.com/en-us/windows/how-to-use-remote-desktop-5cfe0d66-c53b-4bc3-a2b1-27b6a38672a4)
+[enable and use Remote Desktop](https://support.microsoft.com/en-us/windows/experience/connectivity-networking/how-to-use-remote-desktop)
 (Windows Settings → System → Remote Desktop → toggle on) and notes the
 Home/Pro distinction there. On a Mac, Microsoft's
 [Windows App / Remote Desktop client](https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/remote-desktop-clients)
@@ -30,7 +30,7 @@ To reach it safely from outside your LAN:
   machine a private 100.x.y.z address and the connection is
   [WireGuard-encrypted end to end](https://tailscale.com/kb/1136/tailscale-vs-vpn);
   the RDP port never needs to be port-forwarded. See Tailscale's
-  [Windows RDP guide](https://tailscale.com/kb/1273/tailscale-windows-rdp).
+  [Windows RDP guide](https://tailscale.com/docs/solutions/access-remote-desktops-using-windows-rdp).
 - Alternative: any WireGuard or OpenVPN tunnel you control, then RDP inside
   the tunnel.
 
@@ -50,7 +50,7 @@ streaming. For playing Roblox remotely with low latency:
   iOS, Android, tvOS) and stream the Roblox window or the whole desktop.
 - Moonlight is built on the same protocol as NVIDIA GameStream, works with
   NVIDIA/AMD/Intel GPUs and even software capture, and the
-  [setup guide](https://moonlight-stream.org/docs/) walks through pairing
+  [project site](https://moonlight-stream.org) walks through pairing
   and settings (resolution, frame rate, bitrate — tune these to your
   network).
 
@@ -63,7 +63,7 @@ over the LAN or your tailnet, and see the project's
 Windows 10/11 ships an optional OpenSSH server (Settings → Apps → Optional
 Features → OpenSSH Server). It is useful for scripts/updates, but it is a
 terminal — you cannot play Roblox over it. Microsoft documents
-[installing OpenSSH on Windows](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_usefull-windows-server);
+[OpenSSH for Windows](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_overview);
 restrict it to key auth and your tailnet if you enable it.
 
 ## What does not work: playing from inside the Codespace
