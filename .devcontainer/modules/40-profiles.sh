@@ -58,9 +58,14 @@ unpushed_count() { # commits on desktop-data that GitHub does not have yet
 }
 push_data() { # push desktop-data; on a collision, replay local commits on top
   if git push -q origin desktop-data 2>/tmp/profile-push.err; then return 0; fi
-  if git pull --rebase --autostash -q origin desktop-data 2>>/tmp/profile-push.err \
-     && git push -q origin desktop-data 2>>/tmp/profile-push.err; then
-    return 0
+  # Push rejected - typically someone else pushed first. Replay our commits
+  # on top; if the replay hits a conflict, ABORT it so the repo is never
+  # left mid-rebase: the pending commits stay intact and a later run (or a
+  # manual resolution) can retry.
+  if git pull --rebase --autostash -q origin desktop-data 2>>/tmp/profile-push.err; then
+    if git push -q origin desktop-data 2>>/tmp/profile-push.err; then return 0; fi
+  else
+    git rebase --abort 2>/dev/null || true
   fi
   return 1
 }
@@ -82,6 +87,58 @@ prune_pre_restore() { # keep only the newest $KEEP_PRE_RESTORE .pre-restore-* di
     echo "Retention: kept the $KEEP_PRE_RESTORE most recent pre-restore backup(s), removed $removed older one(s)."
   fi
 }
+check_members() { # check_members <tar.gz> <label> -> ok iff every member is safe
+  # Rejects absolute paths, ".." traversal, device/fifo/socket members, and
+  # symlink/hardlink targets that escape the archive: a tampered archive must
+  # not be able to write outside the restore staging area (member data is
+  # checked BEFORE extraction, on the validated listing).
+  tar -tvzf "$1" 2>/dev/null | awk -v label="$2" '
+    {
+      perms = $1
+      path = $6
+      for (i = 7; i <= NF; i++) path = path " " $i
+      target = ""
+      if ((idx = index(path, " -> ")) > 0) {
+        target = substr(path, idx + 4)
+        path = substr(path, 1, idx - 1)
+      }
+      type = substr(perms, 1, 1)
+      bad = ""
+      if (path ~ /^\//) bad = "absolute path"
+      else if (path ~ /(^|\/)\.\.(\/|$)/) bad = "path escapes the archive"
+      else if (type ~ /[bcps]/) bad = "special file (device/fifo/socket)"
+      else if ((type == "l" || type == "h") &&
+               (target ~ /^\// || target ~ /(^|\/)\.\.(\/|$)/))
+        bad = "link target escapes the archive"
+      if (bad != "") {
+        printf "Validation FAILED: the %s archive has an unsafe member: %s (%s).\n", label, path, bad > "/dev/stderr"
+        exit 1
+      }
+    }'
+}
+root_is_dir() { # root_is_dir <tar.gz> <root> -> ok iff <root> is a directory member
+  tar -tvzf "$1" 2>/dev/null | awk -v r="$2" '
+    { p = $6; if (p == r || p == r "/") { if (substr($1, 1, 1) == "d") found = 1; else bad = 1 } }
+    END { exit (found && !bad) ? 0 : 1 }'
+}
+validate_archive() { # validate_archive <tar.gz> <label> [required-root...]
+  # 1) a complete, readable tar.gz  2) only safe members  3) every required
+  # root present AND an actual directory. Returns nonzero (with a message)
+  # on any failure - callers refuse to restore then.
+  local t="$1" label="$2" root listing
+  shift 2
+  if ! listing=$(tar -tzf "$t" 2>/dev/null); then
+    echo "Validation FAILED: the $label archive is corrupted (not a complete tar.gz)." >&2
+    return 1
+  fi
+  if ! check_members "$t" "$label"; then return 1; fi
+  for root in "$@"; do
+    if ! printf '%s\n' "$listing" | grep -qx "$root/\?" || ! root_is_dir "$t" "$root"; then
+      echo "Validation FAILED: the $label archive has no '$root' folder." >&2
+      return 1
+    fi
+  done
+}
 
 case "$ACTION" in
   list)
@@ -98,8 +155,8 @@ case "$ACTION" in
     fetch_origin
     echo "Encrypted profiles (data dir: $DATA_DIR):"
     {
-      git ls-tree -r --name-only FETCH_HEAD -- profiles/ 2>/dev/null | sed 's|^profiles/||'
-      ls -1 "$PROF_DIR"/*.age 2>/dev/null | sed 's|.*/||'
+      ( git ls-tree -r --name-only FETCH_HEAD -- profiles/ 2>/dev/null || true ) | sed 's|^profiles/||'
+      ( ls -1 "$PROF_DIR"/*.age 2>/dev/null || true ) | sed 's|.*/||'
     } | sed 's|\.browser\.tar\.gz\.age$||;s|\.tar\.gz\.age$||' | sort -u | while read -r n; do
       [ -n "$n" ] || continue
       where="remote only"
@@ -203,7 +260,11 @@ case "$ACTION" in
       "$0" list
       read -rp "Profile to restore: " NAME
     fi
-    TMPD="$(mktemp -d)"; trap 'rm -rf "$TMPD"' EXIT
+    # Stage INSIDE the data dir: every later move is then an atomic rename on
+    # the same filesystem (a /tmp staging dir can be another filesystem, where
+    # mv silently degrades to a non-atomic copy + delete).
+    TMPD="$(mktemp -d "$DATA_DIR/.restore-staging.XXXXXX")"
+    trap 'rm -rf "$TMPD"' EXIT
     # Locate the parts of the profile (remote first, local fallback).
     PERSONAL_OK=0 BROWSER_OK=0
     if profile_blob "$NAME" ".tar.gz.age" > "$TMPD/personal.tar.gz.age" 2>/dev/null; then
@@ -216,32 +277,11 @@ case "$ACTION" in
       echo "No profile '$NAME'. Try 'desktop-profile list'." >&2
       exit 1
     fi
-    # What should be restored? --files-only/--browser-only restrict the
-    # restore; by default everything present is restored.
-    if [ "$BROWSER_ONLY" = 1 ]; then
-      want_browser=1; want_files=0
-      [ "$BROWSER_OK" = 0 ] && [ "$PERSONAL_OK" = 0 ] && { echo "Nothing to restore for this profile." >&2; exit 1; }
-    elif [ "$FILES_ONLY" = 1 ]; then
-      want_files=1; want_browser=0
-      [ "$PERSONAL_OK" = 0 ] && { echo "Profile '$NAME' has no personal-files archive (browser secrets only)." >&2; exit 1; }
-    else
-      want_files=1; want_browser=1
-    fi
-
-    # Destructive operation: state exactly what will be replaced and get an
-    # explicit confirmation before asking for the passphrase.
-    PLAN_FILES=$want_files; PLAN_BROWSER=$want_browser
-    if [ "$ASSUME_YES" != 1 ]; then
-      echo "RESTORE will REPLACE this data on the codespace:"
-      [ "$PLAN_FILES" = 1 ] && echo "  - ~/Files (every document currently in it)"
-      [ "$PLAN_BROWSER" = 1 ] && echo "  - the browser profile (bookmarks, history, saved logins)"
-      echo "The replaced state is kept in a local .pre-restore-* folder (never pushed)."
-      read -rp "Type 'restore' to continue (anything else cancels): " ans
-      if [ "$ans" != "restore" ]; then
-        echo "Cancelled - nothing was changed." >&2
-        exit 1
-      fi
-    fi
+    # Retention settings are validated before anything is mutated.
+    case "$KEEP_PRE_RESTORE" in
+      ''|*[!0-9]*) echo "DESKTOP_KEEP_PRE_RESTORE must be a number (got '$KEEP_PRE_RESTORE')." >&2; exit 2 ;;
+    esac
+    [ "$KEEP_PRE_RESTORE" -ge 1 ] || { echo "DESKTOP_KEEP_PRE_RESTORE must be at least 1." >&2; exit 2; }
 
     # Decrypt the needed parts. A wrong passphrase or corrupted archive fails
     # here, BEFORE any local data is touched. The personal archive is also
@@ -273,47 +313,96 @@ case "$ACTION" in
       fi
     fi
 
-    # Validate BEFORE replacing local data: every archive must be a complete,
-    # readable tar.gz with the expected structure. A tampered or truncated
-    # archive stops the restore here.
-    entries_of() { tar -tzf "$1" 2>/dev/null; }
-    LEGACY=0
+    # Validate BEFORE replacing local data - and derive the restore plan
+    # from what the VALIDATED archives actually contain, never from
+    # assumptions: a part the profile does not have is left untouched (never
+    # replaced with an empty folder), and an explicitly requested part that
+    # is missing is an error, not a silent partial restore.
+    ARCH_FILES=0 ARCH_BROWSER=0 LEGACY=0
     if [ "$DEC_PERSONAL" = 1 ]; then
-      ENTRIES=$(entries_of "$TMPD/personal.tar.gz") \
-        || { echo "Validation FAILED: the personal archive is corrupted (not a complete tar.gz)." >&2; echo "Nothing was changed." >&2; exit 1; }
-      # A personal archive must hold ~/Files, the browser profile, or both
-      # (older "legacy" profiles kept files + browser secrets together).
-      if printf '%s\n' "$ENTRIES" | grep -q '^files/\?$'; then
-        printf '%s\n' "$ENTRIES" | grep -q '^private/mozilla' && LEGACY=1
-      elif printf '%s\n' "$ENTRIES" | grep -q '^private/mozilla'; then
-        LEGACY=1
-      else
+      validate_archive "$TMPD/personal.tar.gz" "personal" \
+        || { echo "Nothing was changed." >&2; exit 1; }
+      # A personal archive must hold ~/Files and/or the browser profile (the
+      # latter marks the older "legacy" single archives).
+      ENTRIES=$(tar -tzf "$TMPD/personal.tar.gz" 2>/dev/null)
+      HAS_FILES=0 HAS_MOZ=0
+      printf '%s\n' "$ENTRIES" | grep -qx 'files/\?$' && HAS_FILES=1
+      printf '%s\n' "$ENTRIES" | grep -q '^private/mozilla' && HAS_MOZ=1
+      if [ "$HAS_FILES" = 0 ] && [ "$HAS_MOZ" = 0 ]; then
         echo "Validation FAILED: the personal archive contains neither ~/Files nor the browser profile - refusing to restore." >&2
-        echo "Nothing was changed." >&2
+        echo "Nothing was changed." >&2; exit 1
+      fi
+      if [ "$HAS_FILES" = 1 ] && ! root_is_dir "$TMPD/personal.tar.gz" files; then
+        echo "Validation FAILED: 'files' in the personal archive is not a folder." >&2
+        echo "Nothing was changed." >&2; exit 1
+      fi
+      if [ "$HAS_MOZ" = 1 ] && ! root_is_dir "$TMPD/personal.tar.gz" private/mozilla; then
+        echo "Validation FAILED: 'private/mozilla' in the personal archive is not a folder." >&2
+        echo "Nothing was changed." >&2; exit 1
+      fi
+      ARCH_FILES=$HAS_FILES
+      if [ "$HAS_MOZ" = 1 ]; then ARCH_BROWSER=1; LEGACY=1; fi
+    fi
+    if [ "$DEC_BROWSER" = 1 ]; then
+      validate_archive "$TMPD/browser.tar.gz" "browser" private/mozilla \
+        || { echo "Nothing was changed." >&2; exit 1; }
+      ARCH_BROWSER=1
+    fi
+
+    # Strict selection: an explicitly requested part that the profile does
+    # not have is an error, not a silent partial or empty restore.
+    if [ "$FILES_ONLY" = 1 ] && [ "$ARCH_FILES" = 0 ]; then
+      echo "Profile '$NAME' has no personal-files part - nothing to restore with --files-only." >&2
+      echo "Nothing was changed." >&2; exit 1
+    fi
+    if [ "$BROWSER_ONLY" = 1 ] && [ "$ARCH_BROWSER" = 0 ]; then
+      echo "Profile '$NAME' has no browser part - nothing to restore with --browser-only." >&2
+      echo "Nothing was changed." >&2; exit 1
+    fi
+    # The plan: restore exactly the parts the validated profile has.
+    PLAN_FILES=$ARCH_FILES
+    PLAN_BROWSER=$ARCH_BROWSER
+    if [ "$FILES_ONLY" = 1 ]; then PLAN_BROWSER=0; fi
+    if [ "$BROWSER_ONLY" = 1 ]; then PLAN_FILES=0; fi
+    if [ "$PLAN_FILES" = 0 ] && [ "$PLAN_BROWSER" = 0 ]; then
+      echo "Nothing to restore for this profile." >&2
+      echo "Nothing was changed." >&2; exit 1
+    fi
+
+    if [ "$LEGACY" = 1 ]; then
+      if [ "$BROWSER_ONLY" = 1 ]; then
+        echo "Note: '$NAME' is a legacy single archive; only the browser part is" >&2
+        echo "restored from it - ~/Files is left as it is now." >&2
+      elif [ "$FILES_ONLY" = 1 ]; then
+        echo "Note: '$NAME' is a legacy single archive; only ~/Files is taken from" >&2
+        echo "it - the browser secrets inside it are left out (--files-only)." >&2
+      else
+        echo "Note: '$NAME' is a legacy single archive - personal files and browser" >&2
+        echo "secrets are restored together. Save it again to split them into separate archives." >&2
+      fi
+    fi
+
+    # Destructive operation: confirm the exact, validated replacement plan
+    # before any local data is touched.
+    if [ "$ASSUME_YES" != 1 ]; then
+      echo "RESTORE will REPLACE this data on the codespace:"
+      [ "$PLAN_FILES" = 1 ] && echo "  - ~/Files (every document currently in it)"
+      [ "$PLAN_BROWSER" = 1 ] && echo "  - the browser profile (bookmarks, history, saved logins)"
+      if [ "$PLAN_FILES" = 0 ] && [ "$BROWSER_ONLY" != 1 ]; then
+        echo "  (this profile has no personal-files part - ~/Files is left untouched)"
+      fi
+      if [ "$PLAN_BROWSER" = 0 ] && [ "$FILES_ONLY" != 1 ]; then
+        echo "  (this profile has no browser part - the browser profile is left untouched)"
+      fi
+      echo "The replaced state is kept in a local .pre-restore-* folder (never pushed)."
+      read -rp "Type 'restore' to continue (anything else cancels): " ans
+      if [ "$ans" != "restore" ]; then
+        echo "Cancelled - nothing was changed." >&2
         exit 1
       fi
     fi
-    if [ "$DEC_BROWSER" = 1 ]; then
-      BENTRIES=$(entries_of "$TMPD/browser.tar.gz") \
-        || { echo "Validation FAILED: the browser archive is corrupted (not a complete tar.gz)." >&2; echo "Nothing was changed." >&2; exit 1; }
-      printf '%s\n' "$BENTRIES" | grep -q '^private/mozilla' \
-        || { echo "Validation FAILED: the browser archive does not contain the browser profile (private/mozilla)." >&2; echo "Nothing was changed." >&2; exit 1; }
-    fi
-    if [ "$LEGACY" = 1 ] && [ "$BROWSER_ONLY" = 1 ] && [ "$BROWSER_OK" = 0 ]; then
-      echo "Note: '$NAME' is a legacy single archive - restoring the browser profile" >&2
-      echo "from it also replaces ~/Files (the two are not separate in it)." >&2
-      PLAN_FILES=1
-    elif [ "$LEGACY" = 1 ] && [ "$BROWSER_ONLY" != 1 ] && [ "$FILES_ONLY" != 1 ]; then
-      echo "Note: '$NAME' is a legacy single archive - personal files and browser" >&2
-      echo "secrets are restored together. Save it again to split them into separate archives." >&2
-    fi
-    if [ "$LEGACY" = 1 ] && [ "$FILES_ONLY" = 1 ]; then
-      echo "Note: '$NAME' is a legacy single archive; only ~/Files will be taken" >&2
-      echo "from it - the browser secrets inside it are left out (--files-only)." >&2
-      PLAN_BROWSER=0
-    fi
 
-    # Extract fully; only complete archives get this far. The separate
+    # Extract fully; only validated archives get this far. The separate
     # browser archive is extracted last so, in the rare case a legacy
     # archive and a separate browser archive coexist, the newer separate
     # archive wins the browser profile.
@@ -329,35 +418,41 @@ case "$ACTION" in
 
     # The profile REPLACES ~/Files and/or the browser profile (no mixing with
     # what is on this codespace). The previous state is kept locally, and if
-    # any replace step fails everything is rolled back to that state.
-    BK="$DATA_DIR/.pre-restore-$(date +%Y%m%d-%H%M%S)"
-    mkdir -p "$BK"
-    MOVED_FILES=0 MOVED_BROWSER=0
-    if [ "$PLAN_FILES" = 1 ] && [ -e files ]; then mv files "$BK/files"; MOVED_FILES=1; fi
-    if [ "$PLAN_BROWSER" = 1 ] && [ -e private/mozilla ]; then mv private/mozilla "$BK/private-mozilla"; MOVED_BROWSER=1; fi
-    mkdir -p private
-    ok=1
-    if [ "$PLAN_FILES" = 1 ]; then
-      if [ -d "$TMPD/x/files" ]; then
-        mv "$TMPD/x/files" files || ok=0
-      else
-        mkdir -p files
-      fi
+    # ANY step below fails - while setting the current data aside or while
+    # installing the new data - everything is rolled back to the state the
+    # desktop had before the restore.
+    BK="$(mktemp -d "$DATA_DIR/.pre-restore-$(date +%Y%m%d-%H%M%S).XXXXXX")"
+    MOVED_FILES=0 MOVED_BROWSER=0 ok=1
+    if [ "$PLAN_FILES" = 1 ] && [ -e files ]; then
+      mv files "$BK/files" && MOVED_FILES=1 || ok=0
     fi
-    if [ "$PLAN_BROWSER" = 1 ]; then
-      if [ -d "$TMPD/x/private/mozilla" ]; then
-        mv "$TMPD/x/private/mozilla" private/mozilla || ok=0
-      else
-        mkdir -p private/mozilla
-      fi
+    if [ "$ok" = 1 ] && [ "$PLAN_BROWSER" = 1 ] && [ -e private/mozilla ]; then
+      mkdir -p private
+      mv private/mozilla "$BK/private-mozilla" && MOVED_BROWSER=1 || ok=0
+    fi
+    if [ "$ok" = 0 ]; then
+      echo "Restore FAILED while setting the current data aside - rolling back." >&2
+      [ "$MOVED_FILES" = 1 ] && mv "$BK/files" files
+      [ "$MOVED_BROWSER" = 1 ] && mv "$BK/private-mozilla" private/mozilla
+      rmdir "$BK" 2>/dev/null || true
+      echo "Nothing was changed." >&2
+      exit 1
+    fi
+    if [ "$PLAN_FILES" = 1 ]; then
+      [ -d "$TMPD/x/files" ] && mv "$TMPD/x/files" files || ok=0
+    fi
+    if [ "$ok" = 1 ] && [ "$PLAN_BROWSER" = 1 ]; then
+      mkdir -p private
+      [ -d "$TMPD/x/private/mozilla" ] && mv "$TMPD/x/private/mozilla" private/mozilla || ok=0
     fi
     if [ "$ok" = 0 ]; then
       echo "Restore FAILED while replacing local data - rolling back." >&2
       [ "$PLAN_FILES" = 1 ] && [ -e files ] && rm -rf files
       [ "$PLAN_BROWSER" = 1 ] && [ -e private/mozilla ] && rm -rf private/mozilla
-      if [ "$MOVED_FILES" = 1 ]; then mv "$BK/files" files; else [ "$PLAN_FILES" = 1 ] && mkdir -p files; fi
-      if [ "$MOVED_BROWSER" = 1 ]; then mv "$BK/private-mozilla" private/mozilla; else [ "$PLAN_BROWSER" = 1 ] && mkdir -p private/mozilla; fi
+      [ "$MOVED_FILES" = 1 ] && mv "$BK/files" files
+      [ "$MOVED_BROWSER" = 1 ] && mv "$BK/private-mozilla" private/mozilla
       rmdir "$BK" 2>/dev/null || true
+      echo "Nothing was changed - the previous state was restored." >&2
       exit 1
     fi
     echo "Profile '$NAME' restored. Previous state kept in $BK (local only)."

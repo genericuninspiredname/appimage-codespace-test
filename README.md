@@ -142,7 +142,7 @@ automatically: the `desktop-data` branch keeps every version ever backed up
 (that is what makes restores possible — but it also means deleted documents
 stay in the git history; sensitive material belongs in encrypted profiles),
 and old encrypted profiles are kept until you delete them yourself (`git rm`
-the file in `~/workspaces/desktop-data/profiles` and push).
+the file in `/workspaces/desktop-data/profiles` and push).
 
 **Editing files:** right-click → Text Editor (mousepad), or double-click files
 in the Files window. Save with Ctrl+S — files are written directly to the

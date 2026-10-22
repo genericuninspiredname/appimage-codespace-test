@@ -101,8 +101,11 @@ DATA_DIR="${DESKTOP_DATA_DIR:-/workspaces/desktop-data}"
 cd "$DATA_DIR"
 git add -A -- files/ .gitignore
 committed=0
-if ! git diff --cached --quiet; then
-  git commit -qm "backup $(date -u +%Y-%m-%d_%H:%M)"
+# The commit is limited to the backup's own paths: anything else that was
+# already staged in this repo (e.g. by a user or another tool) is left staged,
+# NOT committed and pushed with the documents.
+if ! git diff --cached --quiet -- files/ .gitignore; then
+  git commit -qm "backup $(date -u +%Y-%m-%d_%H:%M)" -- files/ .gitignore
   committed=1
 fi
 # Fetch first: the pending-commit count below compares against the remote.

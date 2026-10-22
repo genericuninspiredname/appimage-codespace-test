@@ -90,10 +90,23 @@ The desktop appearance is untouched (no menu/Fluxbox changes).
 - `tests/idempotence-test.sh` — still passes (4 lifecycle runs with
   byte-identical state + hook-failure phase), i.e. the changed tools are
   still installed idempotently.
-- Codespace verification on this branch: `bash tests/backup-profile-test.sh`
-  and `bash tests/idempotence-test.sh` both pass inside a codespace built
-  from the branch (see README "Start it"; codespace details in the DONE
-  commit message).
+- Codespace verification on this branch (codespace `storage-backup-test-97qr4jj5wjjv276`,
+  machine `basicLinux32gb`, commit `459419d`):
+  - `bash tests/backup-profile-test.sh` — PASS (all 11 cases, in-codespace).
+  - `bash tests/idempotence-test.sh` — PASS after moving the real
+    `/home/steam/.steam` symlink aside for the duration of the run (restored
+    immediately after). Inside a Codespace the test cannot use `unshare`
+    (blocked), so it runs directly; the real setup that already ran in that
+    codespace had left `/home/steam/.steam` as a symlink, which made the
+    fixture's `link_dir` short-circuit — a test-environment artifact, not a
+    code failure (the same test passes unmodified on a host with user
+    namespaces, e.g. the sandbox run above).
+  - Real repeat-run: `bash .devcontainer/setup.sh normal-start` exits 0;
+    Fluxbox up, noVNC on port 6080 answers HTTP 200, the menu managed
+    block appears exactly once — desktop appearance unchanged.
+  - Live smoke: a real `desktop-backup` run in the codespace committed and
+    pushed the (empty) `~/Files` to the real `desktop-data` branch — the
+    end-to-end push path works against GitHub.
 
 ## Remaining limitations
 
