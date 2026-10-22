@@ -167,7 +167,12 @@ echo \$((n + 1)) > "$FX/zenity.count"
 echo "zenity \$*" >> "$FX/zenity.log"
 if [ "\$n" -eq 0 ]; then
   if [ -n "${3:-}" ]; then printf '%s\n' "$3" >&2; fi
-  if [ -n "${4:-}" ]; then printf '%s\n' "$4"; fi
+  if [ -n "${4:-}" ]; then
+    printf '%s\n' "$4"
+    # real zenity 4 logs GTK/GVFS warnings to stderr alongside the label;
+    # the dispatch must match the label inside that noise (not at the end)
+    printf '(zenity:4242): Gtk-WARNING **: stray message\n' >&2
+  fi
   exit $1
 fi
 exit $2

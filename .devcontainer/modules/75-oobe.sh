@@ -326,10 +326,10 @@ main_dialog() {
             rm -f "$body_file"; return 2 ;;
         esac
         case "$combined" in
-          *"Files")                 action=files ;;
-          *"WebGL Test")            action=webgl ;;
-          *"Performance Settings") action=perf ;;
-          *"Stop Instructions")     action=stop ;;
+          *Files*)                  action=files ;;
+          *"WebGL Test"*)          action=webgl ;;
+          *"Performance Settings"*) action=perf ;;
+          *"Stop Instructions"*)    action=stop ;;
           *)
             # zenity 3 reports a timeout as exit 5 without a label;
             # treat it as "dialog failed" so onboarding retries later
