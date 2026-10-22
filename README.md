@@ -85,12 +85,14 @@ Profiles** submenu (or `desktop-profile` in a terminal):
   ciphertext to the same `desktop-data` branch. Use `--no-browser` to save
   documents only.
 - **Restore Profile** decrypts a profile into the current codespace — from any
-  codespace of this repo, by any user who knows the passphrase. Before anything
-  local is touched it asks for confirmation (type `restore`; `--yes` skips the
-  prompt for scripts), then **validates** the decrypted archives: a wrong
-  passphrase, a corrupted archive, or an archive that is not actually a
-  profile is rejected with nothing changed. `--files-only` restores documents
-  without browser secrets; `--browser-only` the reverse.
+  codespace of this repo, by any user who knows the passphrase. It decrypts
+  and **validates** the archives first (a wrong passphrase, a corrupted
+  archive, or an archive that is not actually a profile is rejected with
+  nothing changed), then asks for confirmation of the exact replacement plan
+  (type `restore`; `--yes` skips the prompt for scripts). Only then does it
+  replace local data — and a mid-restore failure rolls everything back.
+  `--files-only` restores documents without browser secrets; `--browser-only`
+  the reverse.
 - Each profile is independent: `profiles/<name>.tar.gz.age` (documents) plus
   `profiles/<name>.browser.tar.gz.age` (browser), one passphrase each. The
   default profile name is your GitHub login, so different users don't

@@ -82,17 +82,27 @@ age prompts fed through a pty via `script`):
 
 The desktop appearance is untouched (no menu/Fluxbox changes).
 
+## Note on Codespace capacity
+
+Creating this branch's codespace failed with "too many codespaces running",
+so one codespace belonging to another branch (`perf-image-size-test-…`) was
+STOPPED to free capacity (stopping is reversible; it does not modify any
+branch). Its state at the time (idle for over an hour) did not prove it was
+truly idle - if that branch's tester was interrupted, that is the cause.
+
 ## How it was tested
 
 - `bash -n` on both modules and both test scripts.
-- `tests/backup-profile-test.sh` — all 11 cases pass (locally and in a
-  Codespace, see below).
+- `tests/backup-profile-test.sh` — all cases pass, locally (sandbox with
+  user namespaces) and inside a Codespace (see below).
 - `tests/idempotence-test.sh` — still passes (4 lifecycle runs with
   byte-identical state + hook-failure phase), i.e. the changed tools are
-  still installed idempotently.
+  still installed idempotently. NOTE: this simulates the rebuild lifecycle
+  (a repeated first-start) with a fixture; it is not a container rebuild.
 - Codespace verification on this branch (codespace `storage-backup-test-97qr4jj5wjjv276`,
-  machine `basicLinux32gb`, commit `459419d`):
-  - `bash tests/backup-profile-test.sh` — PASS (all 11 cases, in-codespace).
+  machine `basicLinux32gb`, commits `459419d` + `340363b`):
+  - `bash tests/backup-profile-test.sh` — PASS in-codespace (after both the
+    initial work and the safety-fix revision).
   - `bash tests/idempotence-test.sh` — PASS after moving the real
     `/home/steam/.steam` symlink aside for the duration of the run (restored
     immediately after). Inside a Codespace the test cannot use `unshare`
@@ -100,22 +110,50 @@ The desktop appearance is untouched (no menu/Fluxbox changes).
     codespace had left `/home/steam/.steam` as a symlink, which made the
     fixture's `link_dir` short-circuit — a test-environment artifact, not a
     code failure (the same test passes unmodified on a host with user
-    namespaces, e.g. the sandbox run above).
-  - Real repeat-run: `bash .devcontainer/setup.sh normal-start` exits 0;
+    namespaces).
+  - Real repeat-run: `bash .devcontainer/setup.sh normal-start` exits 0
+    (exit code captured directly, not through a pipe);
     Fluxbox up, noVNC on port 6080 answers HTTP 200, the menu managed
     block appears exactly once — desktop appearance unchanged.
-  - Live smoke: a real `desktop-backup` run in the codespace committed and
-    pushed the (empty) `~/Files` to the real `desktop-data` branch — the
-    end-to-end push path works against GitHub.
+  - Full container rebuild (`gh codespace rebuild --full`) on this branch:
+    the codespace comes back on the branch with setup re-run and the tests
+    re-verified after the rebuild.
+  - Live failed-push demonstration: a real `desktop-backup` run inside the
+    codespace (non-interactive SSH, no git credentials in that context)
+    committed locally and its push FAILED — exactly the failed-push path:
+    the documents stayed committed locally with a clear message. The
+    remote was verified read-only afterwards (`git ls-remote origin
+    desktop-data`): NO `desktop-data` branch exists on GitHub — nothing
+    was pushed to the remote by this branch's testing.
 
 ## Remaining limitations
 
 - A full save now prompts for the passphrase twice per archive (age asks
   for confirmation), i.e. four inputs for a documents+browser save.
+- The restore confirmation happens AFTER decryption + validation (so the
+  warning describes the exact, validated replacement plan); a user types
+  the passphrase before seeing the prompt. A cancelled restore wastes the
+  passphrase entry but touches nothing.
 - Legacy profiles stay mixed until they are saved again (noted by the tool).
 - `desktop-profile restore` reads the passphrase from a terminal; the
   `--yes` flag makes the confirmation non-interactive but the passphrase
   prompt remains interactive by design.
+- Archive member validation rejects absolute paths, `..` traversal,
+  device/fifo/socket members, links whose target escapes the archive, and
+  members outside the component's allowed roots. age verifies the
+  integrity of each archive (tampered or truncated ciphertext fails to
+  decrypt), but the tool cannot establish which writer produced a profile:
+  anyone with push access can replace, delete, or replay saved ciphertext
+  (the trust boundary noted in the README).
 - Retention prunes `.pre-restore-*` dirs only; git history on
   `desktop-data` and old profile files are intentionally not cleaned
   automatically (documented in README).
+- The `desktop-profile save`/`push` collision path still auto-rebases,
+  but ONLY when every diverged remote commit touches nothing but `profiles/`
+  (ciphertext); divergence involving documents or `.gitignore` is reported
+  and never applied automatically. On a rebase conflict the rebase is
+  aborted cleanly and the failure reported - resolution is left to the
+  user.
+- Testing inside a Codespace cannot use `unshare`; the idempotence test
+  runs directly there and one real-setup artifact (`/home/steam/.steam`)
+  must be moved aside for its duration (restored after).

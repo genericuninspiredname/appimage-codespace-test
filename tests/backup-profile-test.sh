@@ -325,6 +325,93 @@ echo "$OUT" | grep -q 'legacy single archive; only the browser part' \
   || fail "legacy --browser-only note missing: $OUT"
 echo "   ok: legacy --browser-only restores only browser data"
 
+# ------------------------------- 10b. browser archive smuggling a files/ payload ---
+echo "== browser archive that smuggles a files/ payload: refused"
+# a 'smug' profile: fine personal part, but the browser archive also carries
+# a files/ payload - extracted last, it would overwrite the validated
+# personal part. The component-root check must refuse it.
+mkdir -p "$WORK/smug/files/docs" "$WORK/smug/private/mozilla/firefox/x.default"
+echo "smuggled"        > "$WORK/smug/files/docs/note.txt"
+echo "smug-bookmark"   > "$WORK/smug/private/mozilla/firefox/x.default/bookmarks.json"
+tar -czf "$WORK/smug/p.tar.gz" -C "$WORK/smug" files
+tar -czf "$WORK/smug/b.tar.gz" -C "$WORK/smug" files private/mozilla
+printf '%s' "$PASS_IN" | script -qec "age -p -o $D/profiles/smug.tar.gz.age $WORK/smug/p.tar.gz" /dev/null >/dev/null 2>&1
+printf '%s' "$PASS_IN" | script -qec "age -p -o $D/profiles/smug.browser.tar.gz.age $WORK/smug/b.tar.gz" /dev/null >/dev/null 2>&1
+git -C "$D" add profiles/ && git -C "$D" commit -qm 'test: smuggled browser archive' \
+  && git -C "$D" push -q origin desktop-data
+OUT=$(printf '%s%srestore\n' "$PASS_DEC" "$PASS_DEC" \
+        | script -qec 'desktop-profile restore smug' /dev/null 2>&1) \
+  && fail "restore of smuggled browser archive unexpectedly succeeded"
+echo "$OUT" | grep -q 'member outside the allowed roots' \
+  || fail "smuggled payload not reported: $OUT"
+[ "$(cat "$H/Files/docs/note.txt")" = "legacy-files-untouched" ] \
+  || fail "local data changed by smuggled archive"
+echo "   ok: refused, data untouched"
+
+# ------------------------------------------ 10c. rollback on replace failures ---
+echo "== rollback when a replace step fails (injected mv failures)"
+# a stub mv that fails on its Nth call - the restore's swap uses mv exactly
+# 4 times (files aside, browser aside, files in, browser in)
+mkdir -p "$WORK/stubmv"
+cat > "$WORK/stubmv/mv" <<'STUB'
+#!/bin/sh
+n=$(cat "$FAILMV_COUNT" 2>/dev/null || echo 0)
+n=$((n + 1))
+echo "$n" > "$FAILMV_COUNT"
+if [ "$n" = "${FAILMV_N:-}" ]; then
+  echo "mv: injected failure (call #$n)" >&2
+  exit 1
+fi
+exec /usr/bin/mv "$@"
+STUB
+chmod +x "$WORK/stubmv/mv"
+# case 1: the SECOND move-aside fails (documents already moved aside)
+mkdir -p "$H/.mozilla/firefox/abc.default-release"
+echo "rb1-files"    > "$H/Files/docs/note.txt"
+echo "rb1-bookmark" > "$H/.mozilla/firefox/abc.default-release/bookmarks.json"
+rm -f "$WORK/failmv.count"
+OUT=$(printf '%s%srestore\n' "$PASS_DEC" "$PASS_DEC" \
+        | FAILMV_COUNT="$WORK/failmv.count" FAILMV_N=2 PATH="$WORK/stubmv:$PATH" \
+          script -qec 'desktop-profile restore t1' /dev/null 2>&1) \
+  && fail "restore with failing move-aside unexpectedly succeeded"
+echo "$OUT" | grep -q 'rolling back' || fail "rollback not reported (move-aside): $OUT"
+[ "$(cat "$H/Files/docs/note.txt")" = "rb1-files" ] \
+  || fail "files not restored on move-aside failure"
+[ "$(cat "$H/.mozilla/firefox/abc.default-release/bookmarks.json")" = "rb1-bookmark" ] \
+  || fail "browser data not intact on move-aside failure"
+echo "   ok: move-aside failure rolls back both parts"
+# case 2: the browser INSTALL fails (new documents already installed)
+rm -f "$WORK/failmv.count"
+OUT=$(printf '%s%srestore\n' "$PASS_DEC" "$PASS_DEC" \
+        | FAILMV_COUNT="$WORK/failmv.count" FAILMV_N=4 PATH="$WORK/stubmv:$PATH" \
+          script -qec 'desktop-profile restore t1' /dev/null 2>&1) \
+  && fail "restore with failing install unexpectedly succeeded"
+echo "$OUT" | grep -q 'rolling back' || fail "rollback not reported (install): $OUT"
+[ "$(cat "$H/Files/docs/note.txt")" = "rb1-files" ] \
+  || fail "files not restored on install failure"
+[ "$(cat "$H/.mozilla/firefox/abc.default-release/bookmarks.json")" = "rb1-bookmark" ] \
+  || fail "browser data not restored on install failure"
+echo "   ok: install failure rolls back both parts"
+
+# ------------------------------------- 10d. the current recovery copy is prune-proof ---
+echo "== retention always keeps the current recovery copy"
+# stale dirs with FUTURE mtimes must not be able to get the fresh recovery
+# copy pruned (it is explicitly protected, not just assumed newest)
+for i in 1 2 3; do mkdir -p "$D/.pre-restore-2030010$i-000000"; done
+touch -d '2030-01-01' "$D"/.pre-restore-2030010*-000000
+OUT=$(printf '%s%srestore\n' "$PASS_DEC" "$PASS_DEC" \
+        | script -qec 'DESKTOP_KEEP_PRE_RESTORE=2 desktop-profile restore t1' /dev/null 2>&1) \
+  || fail "restore (recovery-protection run) failed: $OUT"
+BK_PATH=$(printf '%s\n' "$OUT" | sed -n 's/.*kept in \(\/[^ ]*\) (local only).*/\1/p')
+[ -n "$BK_PATH" ] || fail "recovery path not reported: $OUT"
+[ -d "$BK_PATH" ] || fail "the current recovery copy was pruned"
+[ "$(cat "$BK_PATH/files/docs/note.txt" 2>/dev/null)" = "rb1-files" ] \
+  || fail "recovery copy does not hold the replaced data"
+N=$(ls -1d "$D"/.pre-restore-* 2>/dev/null | wc -l)
+[ "$N" = 2 ] || fail "expected 2 pre-restore dirs (current + 1), got $N"
+echo "$OUT" | grep -q 'Retention: kept the 2 most recent' || fail "retention note missing: $OUT"
+echo "   ok: current recovery copy survives pruning"
+
 # ------------------------------------------- 11. failed push + retry (profile) ---
 echo "== failed push: profile kept locally, reported, retry uploads it"
 git init -q --bare "$WORK/origin2.git"
@@ -382,6 +469,44 @@ git -C "$D4" log --oneline | grep -q 'encrypted profile: conf' \
 git -C "$D4" status --short -- profiles/ | grep -q . \
   && fail "profile tree dirt after collision: $(git -C "$D4" status --short -- profiles/)"
 echo "   ok: rebase aborted, pending commit + profile kept, reported"
+
+# --------------------------- 11c. divergence involving documents: never auto-merged ---
+echo "== push collision involving documents: reported, local data kept as-is"
+git init -q --bare "$WORK/origin6.git"
+H6="$WORK/home6"; D6="$WORK/data6"; B6="$WORK/bin6"
+make_fixture "$H6" "$D6" "$B6" "file://$WORK/origin6.git"
+# codespace A backs up documents (incl. keep.txt) and pushes
+echo "keep" > "$H6/Files/keep.txt"
+DESKTOP_DATA_DIR="$D6" desktop-backup >/dev/null || fail "fixture backup failed"
+# codespace B starts from A's state
+H7="$WORK/home7"; D7="$WORK/data7"; B7="$WORK/bin7"
+make_fixture "$H7" "$D7" "$B7" "file://$WORK/origin6.git"
+# A deletes a document and pushes (a backup from another codespace)
+rm "$H6/Files/keep.txt"
+DESKTOP_DATA_DIR="$D6" desktop-backup >/dev/null || fail "fixture deletion backup failed"
+# B saves a profile: the push must be REJECTED, and A's document deletion
+# must NOT be applied to B's live tree
+echo "local-doc" > "$H7/Files/local.txt"
+DESKTOP_DATA_DIR="$D7"; export DESKTOP_DATA_DIR
+OUT=$(pty_run "$PASS_IN" 'desktop-profile save t6' 2>&1) \
+  && fail "save against document divergence unexpectedly succeeded"
+echo "$OUT" | grep -q 'diverged' || fail "document divergence not reported: $OUT"
+echo "$OUT" | grep -q 'NOT merged' \
+  || fail "no-automerge guarantee not stated: $OUT"
+[ -f "$H7/Files/keep.txt" ] || fail "remote document deletion was applied locally"
+[ -f "$H7/Files/local.txt" ] || fail "local document lost"
+# the pending ciphertext commit must be intact and unpushed
+[ -f "$D7/profiles/t6.tar.gz.age" ] || fail "profile lost after document divergence"
+[ "$(git -C "$D7" rev-list --count FETCH_HEAD..HEAD)" -ge 1 ] \
+  || fail "pending commit lost after document divergence"
+if [ -d "$D7/.git/rebase-merge" ] || [ -d "$D7/.git/rebase-apply" ]; then
+  fail "repo left mid-rebase after document divergence"
+fi
+# and B's live documents must be exactly as before the failed push
+# (tracked files unmodified; the new local.txt is untracked, which is fine)
+git -C "$D7" diff --quiet -- files/ \
+  || fail "tracked documents modified after failed push: $(git -C "$D7" status --short -- files/)"
+echo "   ok: reported, nothing applied, pending profile kept"
 
 # --------------------------------------------- 12. failed push + retry (backup) ---
 echo "== desktop-backup: failed push keeps documents locally, retry uploads them"
