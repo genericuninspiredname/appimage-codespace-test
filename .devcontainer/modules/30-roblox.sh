@@ -15,13 +15,22 @@
 #     the overlay script, the module, or the flatpak runtimes change.
 # ---------------------------------------------------------------------------
 if [ -f /usr/local/share/sober-overlay.py ]; then
+  # Inputs: the overlay script, this module, and the commit ids of the
+  # flatpak deployments the overlay walks (resolved through each
+  # <arch>/<branch>/active link - "current" is only a branch name).
   OVERLAY_INPUT="$(mod_hash) overlay=$(md5sum /usr/local/share/sober-overlay.py | cut -d' ' -f1) \
-rt=$(readlink /var/lib/flatpak/runtime/org.gnome.Platform/x86_64/current 2>/dev/null || echo none) \
-gl=$(readlink /var/lib/flatpak/runtime/org.freedesktop.Platform.GL.default/x86_64/current 2>/dev/null || echo none)"
+rt=$(flatpak_active /var/lib/flatpak/runtime/org.gnome.Platform | tr '\n' ',') \
+gl=$(flatpak_active /var/lib/flatpak/runtime/org.freedesktop.Platform.GL.default | tr '\n' ',')"
   if stamp_changed sober-overlay "$OVERLAY_INPUT"; then
-    python3 /usr/local/share/sober-overlay.py >/dev/null 2>&1 || true
-    ldconfig 2>/dev/null || true
-    stamp_done sober-overlay "$OVERLAY_INPUT"
+    # Non-fatal on failure (as before), but the stamp is written ONLY on
+    # success, so a transient failure is retried on the next start
+    # instead of being silently recorded as done.
+    if python3 /usr/local/share/sober-overlay.py >/dev/null 2>&1; then
+      ldconfig 2>/dev/null || true
+      stamp_done sober-overlay "$OVERLAY_INPUT"
+    else
+      echo "WARNING: Sober library overlay failed - not stamped; will retry on the next start." >&2
+    fi
   else
     echo "Sober library overlay already current - skipped."
   fi
@@ -72,7 +81,7 @@ APP_FILES=/var/lib/flatpak/app/org.vinegarhq.Sober/current/active/files
 if [ -d "$APP_FILES/bin" ]; then
   # Gated: the hardlink tree only changes when the flatpak (or this
   # module) changes. A plain stop/start reuses /app as-is.
-  APP_INPUT="$(mod_hash) app=$(readlink /var/lib/flatpak/app/org.vinegarhq.Sober/current 2>/dev/null || echo none)"
+  APP_INPUT="$(mod_hash) app=$(flatpak_active /var/lib/flatpak/app/org.vinegarhq.Sober | tr '\n' ',')"
   if stamp_changed sober-app "$APP_INPUT"; then
     rm -rf /app.new
     cp -al "$APP_FILES" /app.new && rm -rf /app && mv /app.new /app
@@ -89,7 +98,7 @@ fi
 RT_SHARE=$(ls -d /var/lib/flatpak/runtime/org.gnome.Platform/x86_64/*/active/files/share 2>/dev/null | head -1)
 if [ -n "$RT_SHARE" ]; then
   # Gated the same way: only re-copy when the runtime (or module) changes.
-  RT_INPUT="$(mod_hash) rt=$(readlink "$(dirname "$RT_SHARE")" 2>/dev/null || echo "$RT_SHARE")"
+  RT_INPUT="$(mod_hash) rt=$(flatpak_active /var/lib/flatpak/runtime/org.gnome.Platform | tr '\n' ',')"
   if stamp_changed sober-runtime-share "$RT_INPUT"; then
     if [ -d "$RT_SHARE/alsa" ]; then
       mkdir -p /usr/share/alsa && cp -a "$RT_SHARE/alsa/." /usr/share/alsa/

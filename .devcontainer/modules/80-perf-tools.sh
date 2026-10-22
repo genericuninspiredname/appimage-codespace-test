@@ -31,18 +31,40 @@ chmod +x "$BIN_DIR/desktop-stats"
 cat > "$BIN_DIR/desktop-idle" <<'DI'
 #!/usr/bin/env bash
 # Idle/inactivity check for the codespace (perf controls). Reports how long
-# terminal sessions have been idle and whether the usual desktop apps are
-# running, then reminds you how to stop (free compute) or delete (also free
-# storage) the codespace. Read-only: it never stops anything itself.
-CS="${GITHUB_CODESPACE_NAME:-this codespace}"
+# terminal sessions and the DESKTOP (X server input) have been idle, then
+# reminds you how to stop (free compute) or delete (also free storage) the
+# codespace. Read-only: it never stops anything itself.
+CS="${CODESPACE_NAME:-${GITHUB_CODESPACE_NAME:-}}"
 echo "== Codespace idle check =="
-echo "Codespace: $CS"
+if [ -n "$CS" ]; then
+  echo "Codespace: $CS"
+else
+  echo "Codespace: (name not set in this shell - run 'gh codespace list' to see it)"
+fi
+echo
+echo "Desktop input idle (time since last mouse/keyboard on the desktop):"
+if command -v xprintidle >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
+  ms=$(xprintidle 2>/dev/null)
+  if [ -n "$ms" ]; then
+    awk -v ms="$ms" 'BEGIN {
+      m = int(ms / 60000)
+      if (m < 1)       print "  active (last input less than a minute ago)"
+      else if (m < 60) printf "  idle for %d minute(s)\n", m
+      else             printf "  idle for %d hour(s) %d minute(s)\n", int(m/60), m%60
+    }'
+  else
+    echo "  unknown (xprintidle could not reach the display)"
+  fi
+else
+  echo "  unknown (xprintidle not available, or DISPLAY not set -"
+  echo "  run this from the desktop terminal or set DISPLAY=:1)"
+fi
 echo
 echo "Terminal sessions (idle time):"
 if w -h 2>/dev/null | grep -q .; then
   w -h | awk '{printf "  user %s on %s: idle %s\n", $1, $2, $5}'
 else
-  echo "  (no terminal sessions)"
+  echo "  (no registered terminal sessions - SSH sessions may not register)"
 fi
 echo
 echo "Desktop apps currently running:"
@@ -58,11 +80,18 @@ echo
 echo "Idle timeout: Codespaces stops the machine automatically after your"
 echo "idle timeout (default 30 min; change it at github.com/settings/codespaces)."
 echo
-echo "Done for now?  Stop the codespace (ends compute billing, keeps disk):"
-echo "  gh codespace stop -c $CS"
-echo "Done for good?  Delete it (also ends storage billing; ~/Files is lost"
-echo "unless you ran Back Up Files first):"
-echo "  gh codespace delete -c $CS"
+if [ -n "$CS" ]; then
+  echo "Done for now?  Stop the codespace (ends compute billing, keeps disk):"
+  echo "  gh codespace stop -c $CS"
+  echo "Done for good?  Delete it (also ends storage billing; ~/Files is lost"
+  echo "unless you ran Back Up Files first):"
+  echo "  gh codespace delete -c $CS"
+else
+  echo "Done for now?  Stop the codespace (ends compute billing, keeps disk):"
+  echo "  gh codespace stop   (add '-c <name>' from 'gh codespace list')"
+  echo "Done for good?  Delete it (also ends storage billing; back up first):"
+  echo "  gh codespace delete (add '-c <name>' from 'gh codespace list')"
+fi
 echo
 echo "See 'desktop-stats' for CPU/memory usage."
 DI

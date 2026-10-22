@@ -44,7 +44,8 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
   **Ctrl+Alt+Delete**) opens `htop` in a terminal — CPU, memory, and
   processes, with F9 to kill a stuck app.
 - **Resolution:** right-click → System → Set Resolution (the default is
-  1024x640 — lowered to keep the software-rendered desktop snappy and cheap;
+  1024x640 — ~36% fewer pixels than the old 1280x800, so the
+  software-rendered desktop does proportionally less work per frame;
   bump it back up there if you want more room). Fewer pixels = snappier.
 - **After a rebuild:** the desktop may have started before setup applied
   desktop tweaks — right-click → **Apply Desktop Updates** (or stop and start
@@ -302,9 +303,10 @@ once more. To force everything to re-run on the next start:
 what a start actually costs.
 
 **Idle check:** the menu's **Idle Check** (or `desktop-idle` in a terminal)
-shows how long your terminal sessions have been idle, which desktop apps
-are running, and the stop/delete commands — a read-only reminder, it never
-stops anything itself.
+shows how long the desktop has had no mouse/keyboard input (via
+`xprintidle`), how long terminal sessions have been idle, which desktop
+apps are running, and the stop/delete commands — a read-only reminder,
+it never stops anything itself.
 
 **Diagnostics:** **System Stats** (or `desktop-stats`) prints a one-shot
 CPU/memory snapshot: load, memory, swap, and the top processes by memory.

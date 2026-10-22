@@ -36,3 +36,14 @@ stamp_done() { # <name> <input>
 mod_hash() {
   md5sum "${BASH_SOURCE[1]}" 2>/dev/null | cut -d' ' -f1
 }
+
+# flatpak_active <install-or-runtime-dir>: commit ids of the deployments a
+# gated section depends on. The obvious "current" symlink resolves to a
+# BRANCH name (e.g. x86_64/stable), not a commit - the actual deployed
+# commit is the target of each <arch>/<branch>/active link, so hash those.
+flatpak_active() { # <dir containing x86_64>
+  local d
+  for d in "$1"/x86_64/*/active; do
+    [ -L "$d" ] && readlink "$d"
+  done
+}

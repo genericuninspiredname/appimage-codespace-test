@@ -33,25 +33,55 @@ set -e
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 WORK=$(mktemp -d /tmp/setup-idem.XXXXXX)
-# When this test runs unisolated inside a Codespace (user namespaces are
-# blocked there), /home/steam/.steam is a symlink created by the REAL
-# setup; link_dir would early-return on it and the fixture's steam dir
-# would never be created. Save it, remove it for the duration of the test,
-# and restore it on exit so the real setup state is preserved.
-STEAM_LINK_BACKUP=""
-if [ -L /home/steam/.steam ]; then
-  STEAM_LINK_BACKUP=$(readlink /home/steam/.steam)
-  rm /home/steam/.steam
+fail() { echo "FAIL: $*" >&2; exit 1; }
+
+# --- isolation check FIRST: when user namespaces are available the whole
+# run happens inside a private namespace and nothing outside is touched;
+# the live-link surgery below is only needed for the unisolated case.
+ISOLATED=0
+if unshare -rm true 2>/dev/null; then ISOLATED=1; fi
+
+# --- live app-home links (unisolated runs only, e.g. inside a Codespace) -----
+# The unisolated run repoints REAL app-home symlinks into the temporary
+# fixture: 30-roblox.sh repoints /home/roblox/.var/app/org.vinegarhq.Sober
+# and 35-steam.sh repoints /home/steam/.steam and
+# /home/steam/.local/share/Steam. Save each existing symlink and restore it
+# on exit; links the test itself created (pointing into $WORK) are removed
+# at cleanup so nothing is left dangling. A REAL directory at any of these
+# paths would be destructively migrated by link_dir - refuse to run then.
+LIVE_LINKS=(
+  "/home/steam/.steam"
+  "/home/steam/.local/share/Steam"
+  "/home/roblox/.var/app/org.vinegarhq.Sober"
+)
+declare -A LIVE_LINK_BACKUP
+if [ "$ISOLATED" = 0 ]; then
+  for p in "${LIVE_LINKS[@]}"; do
+    if [ -L "$p" ]; then
+      LIVE_LINK_BACKUP["$p"]=$(readlink "$p")
+      rm "$p"
+    elif [ -d "$p" ]; then
+      fail "refusing to run: $p is a real directory (would be migrated)"
+    fi
+  done
 fi
 cleanup() {
   rm -rf "$WORK"
-  if [ -n "$STEAM_LINK_BACKUP" ]; then
-    ln -sfn "$STEAM_LINK_BACKUP" /home/steam/.steam
+  if [ "$ISOLATED" = 0 ]; then
+    for p in "${LIVE_LINKS[@]}"; do
+      # remove links the test created into the fixture, restore saved ones
+      if [ -L "$p" ]; then
+        tgt=$(readlink "$p")
+        case "$tgt" in "$WORK"/*) rm "$p";; esac
+      fi
+      if [ -n "${LIVE_LINK_BACKUP[$p]:-}" ]; then
+        mkdir -p "$(dirname "$p")"
+        ln -sfn "${LIVE_LINK_BACKUP[$p]}" "$p"
+      fi
+    done
   fi
 }
 trap cleanup EXIT
-
-fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # --- fixture: fake origin repo (fetch of desktop-data must fail fast) --------
 git init -q --bare "$WORK/origin.git"
@@ -90,8 +120,13 @@ chmod +x "$WORK/dc/hooks/first-start.d/90-test.sh" "$WORK/dc/hooks/normal-start.
 # --- fixture: a home that looks "used" -----------------------------------------
 H="$WORK/home"
 mkdir -p "$H/.fluxbox" "$H/Files/docs" "$H/.mozilla/firefox/abc123.default-release" \
+         "$H/.config/mozilla/firefox/cfg789.default" \
          "$H/.var/app/org.vinegarhq.Sober" "$H/.cache"
 echo "hello" > "$H/Files/docs/note.txt"
+# the pkgforge Firefox AppImage keeps profiles under ~/.config/mozilla -
+# give it the same "used" profile shape as the ~/.mozilla one
+printf 'user_pref("webgl.disabled", true);\nuser_pref("user.set2", 1);\n' \
+  > "$H/.config/mozilla/firefox/cfg789.default/user.js"
 cat > "$H/.fluxbox/menu" <<'EOF'
 [begin] (Fluxbox)
 [exec] (Old App) {oldapp}
@@ -106,8 +141,7 @@ printf 'Old User Line\n' > "$H/.fluxbox/keys"
 mkdir -p "$WORK/data" "$WORK/bin" "$WORK/xwww-dir"
 
 # --- run helper: real coordinator, isolated env --------------------------------
-ISOLATED=0
-if unshare -rm true 2>/dev/null; then ISOLATED=1; fi
+# (ISOLATED was determined before the live-link surgery above)
 
 run_setup() { # run_setup <fixture-root> <mode>  ("" mode = no argument)
   local fx="$1" mode="$2" inner
@@ -210,6 +244,11 @@ grep -q '\[exec\] (Prism Launcher) {prismlauncher}' "$MENU" || fail "Prism Launc
 grep -q 'webgl.force-enabled", true' "$H/.mozilla/firefox/abc123.default-release/user.js" || fail "webgl pref missing"
 [ "$(grep -c 'webgl' "$H/.mozilla/firefox/abc123.default-release/user.js")" = 2 ] || fail "webgl prefs duplicated"
 grep -q 'user.set' "$H/.mozilla/firefox/abc123.default-release/user.js" || fail "user-authored prefs lost"
+# ~/.config/mozilla profile (pkgforge AppImage layout): same guarantees
+CFGJS="$H/.config/mozilla/firefox/cfg789.default/user.js"
+grep -q 'webgl.force-enabled", true' "$CFGJS" || fail "webgl pref missing (config root)"
+[ "$(grep -c 'webgl' "$CFGJS")" = 2 ] || fail "webgl prefs duplicated (config root)"
+grep -q 'user.set2' "$CFGJS" || fail "user-authored prefs lost (config root)"
 [ -f "$H/.cache/.disable-namespaces-check" ] || fail "namespaces-check flag missing"
 [ -f "$WORK/data/.gitignore" ] || fail "data-dir gitignore missing"
 # --- perf/codespace-cost-controls assertions -------------------------------
@@ -221,6 +260,39 @@ grep -q '\[exec\] (Idle Check) {tilix -e desktop-idle}' "$MENU" || fail "Idle Ch
 [ "$(grep -c 'tilix -e desktop-idle' "$MENU")" = 1 ] || fail "Idle Check menu entry duplicated"
 # startup stamps: written per container lifetime, stable across runs
 [ -d "$WORK/stamps" ] || fail "stamp dir not created"
+# gate failure semantics: a FAILED gated command must leave no stamp
+# (retried next start); once it succeeds it is stamped and then skipped
+( export DESKTOP_STAMP_DIR="$WORK/stamps-fail"
+  bash -c '
+    set -e
+    . "'"$REPO"'/.devcontainer/modules/05-startup-gates.sh"
+    # simulate the overlay pattern: fail -> warn, do NOT stamp
+    if stamp_changed work-a in1; then
+      if false; then :; else echo "(simulated failure - no stamp)" >/dev/null; fi
+    fi
+    if [ -f "$STAMP_DIR/work-a" ]; then echo "FAIL: stamped despite failure" >&2; exit 1; fi
+    # retry: succeeds -> stamped; the next run must skip
+    if stamp_changed work-a in1; then stamp_done work-a in1; fi
+    if stamp_changed work-a in1; then echo "FAIL: stamped work re-ran" >&2; exit 1; fi
+  '
+) || fail "gate failure semantics broken"
+# flatpak_active: must resolve <arch>/<branch>/active links (the commit),
+# NOT the "current" symlink (which is only a branch name); a redeployed
+# commit under the same branch must change the result.
+( bash -c '
+    set -e
+    export DESKTOP_STAMP_DIR="$(mktemp -d)"   # do not touch the real stamp dir
+    . "'"$REPO"'/.devcontainer/modules/05-startup-gates.sh"
+    D=$(mktemp -d)
+    mkdir -p "$D/x86_64/stable"
+    ln -sfn "$D/x86_64/commitA" "$D/x86_64/stable/active"
+    ln -sfn x86_64/stable "$D/current"
+    [ "$(flatpak_active "$D")" = "$D/x86_64/commitA" ] || { echo "FAIL: flatpak_active did not resolve the active commit" >&2; exit 1; }
+    ln -sfn "$D/x86_64/commitB" "$D/x86_64/stable/active"
+    [ "$(flatpak_active "$D")" = "$D/x86_64/commitB" ] || { echo "FAIL: redeployed commit (same branch) not detected" >&2; exit 1; }
+    rm -rf "$D"
+  '
+) || fail "flatpak_active resolution broken"
 # gate helpers: missing stamp runs, unchanged input skips, changed input re-runs
 ( export DESKTOP_STAMP_DIR="$WORK/stamps-unit"
   bash -c '
