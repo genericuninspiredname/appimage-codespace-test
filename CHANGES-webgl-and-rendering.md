@@ -62,13 +62,36 @@ terminal), next to the existing Task Manager entry.
   not need the built image; the full tool is exercised in the codespace
   itself.
 
-## Test results (codespace, branch `diagnostics/webgl-and-rendering`)
+## Test results (branch `diagnostics/webgl-and-rendering`)
 
-- `bash -n` on the module and the installed tool: clean.
-- `tests/idempotence-test.sh` (existing suite, extended fixture): pass —
-  setup runs 4x with byte-identical state, managed blocks appear once.
-- `tests/diagnostics-test.sh`: pass.
-- In the codespace: `desktop-doctor` full run (WebGL available via
-  software llvmpipe, resolution 1280x800 depth 24, CPU/memory sampled),
-  repeat run, `--no-probe` run, and re-run after a container rebuild —
-  all behave as documented. Details in the branch's final report.
+Verified locally (bash syntax check, `tests/diagnostics-test.sh`, and the
+existing `tests/idempotence-test.sh` — all pass), and in a real
+Codespace built from this branch:
+
+- `desktop-doctor` full run: display section verified (1280x800,
+  24-bit, virtual VNC display), CPU and memory sections verified with
+  labeled host/container scopes; exit code and repeat runs behave as
+  documented (`--no-probe`, unknown option rejection, second run).
+- Setup re-run on a live codespace (`normal-start` after pulling a
+  fix) applies the tool cleanly without disturbing the running desktop.
+- WebGL probe: **the success path could not be verified in the test
+codespace, and this is a pre-existing environment issue, not a gap in
+the tool**: the Firefox AppImage in this environment opens a window but
+never renders any page (local `file://` and remote URLs alike), on
+master as well as on this branch (verified on a separate master
+codespace), with the project launcher and with fluxbox-remote, and with
+every sandbox env variation tried. The probe therefore times out, and
+the tool reports exactly that: "browser launched but never loaded the
+probe page", with a hint that a browser unable to open any page is a
+browser-build problem, not a WebGL-specific one. No security flags
+were added or cleared to make the probe pass — the browser runs with
+its normal configuration.
+
+Remaining limitations:
+
+- The WebGL probe's positive path ("available", renderer reported) is
+  implemented but unverified in this environment for the reason above.
+- `glxinfo` is not part of the image (not in `install-apps.sh` on
+  master), so GLX evidence appears only when it is installed manually.
+- CPU/memory read the host `/proc` (Codespaces containers see the host
+  view); the tool labels the scopes rather than guessing.

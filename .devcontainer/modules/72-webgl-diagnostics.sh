@@ -31,7 +31,9 @@ cat > "$BIN_DIR/desktop-doctor" <<'DOCTOR'
 set -u
 
 FIREFOX="${DESKTOP_FIREFOX:-/opt/apps/firefox/AppRun}"
-PROBE_TIMEOUT=35          # seconds given to the headless browser probe
+PROBE_TIMEOUT=60          # seconds given to the headless browser probe
+                         # (first launch can be slow: ~25s portal/D-Bus
+                         # timeouts before the page even starts loading)
 
 # --- output helpers (plain when not a tty) -----------------------------------
 if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
@@ -117,11 +119,12 @@ find_display() {
 # URL that creates a WebGL context and reports the unmasked renderer to a
 # one-shot local collector. Nothing is disabled to make it pass - the
 # browser runs with its normal configuration.
-probe_webgl() { # -> sets PROBE_CTX/PROBE_RENDERER/PROBE_VENDOR
+probe_webgl() { # -> sets PROBE_CTX/PROBE_RENDERER/PROBE_VENDOR; rc 2 = browser ran, page never loaded
   local work port url ctx renderer vendor collector ff i
   command -v python3 >/dev/null 2>&1 || { hint "python3 not found - browser probe skipped."; return 1; }
   [ -x "$FIREFOX" ] || { hint "Browser not found at $FIREFOX - set DESKTOP_FIREFOX to override."; return 1; }
   work=$(mktemp -d /tmp/desktop-doctor.XXXXXX) || return 1
+  mkdir -p "$work/profile"
 
   # free local port for the collector
   port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()') \
@@ -171,6 +174,7 @@ PAGE
 
   python3 "$work/collect.py" "$work/result.json" "$port" &
   collector=$!
+  PROBE_LAUNCHED=1
   ( MOZ_HEADLESS=1 timeout -k 5 "$PROBE_TIMEOUT" "$FIREFOX" \
       --profile "$work/profile" --new-instance "$url" >/dev/null 2>&1 ) &
   ff=$!
@@ -190,16 +194,18 @@ PAGE
     return 0
   fi
   rm -rf "$work"
+  [ "${PROBE_LAUNCHED:-0}" = "1" ] && return 2
   return 1
 }
 
 # --- sections -------------------------------------------------------------------
 check_webgl() {
-  local local_prefs glx glx_renderer
-  PROBE_CTX="" PROBE_RENDERER="" PROBE_VENDOR=""
+  local local_prefs glx glx_renderer rc
+  PROBE_CTX="" PROBE_RENDERER="" PROBE_VENDOR="" PROBE_LAUNCHED=0
 
   if [ "${1:-}" != "--no-probe" ]; then
-    if probe_webgl; then
+    probe_webgl; rc=$?
+    if [ "$rc" -eq 0 ]; then
       case "$PROBE_CTX" in
         webgl2|webgl)
           WEBGL_STATUS="available"
@@ -219,9 +225,14 @@ check_webgl() {
       esac
     else
       WEBGL_STATUS="unknown"
-      warn "Browser WebGL probe could not run (missing browser or python3, or it timed out)"
-      note "Falling back to Firefox prefs + GLX evidence below."
-      hint "WebGL probe could not run: verify the browser is installed."
+      warn "Browser WebGL probe could not run"
+      if [ "$rc" -eq 2 ]; then
+        note "The browser launched but never loaded the probe page (timeout ${PROBE_TIMEOUT}s; first launch can be slow)."
+        hint "Browser started but never loaded the probe page: if the desktop browser also fails to open any page, the browser build itself cannot render in this environment - not a WebGL-specific problem."
+      else
+        note "Falling back to Firefox prefs + GLX evidence below."
+        hint "WebGL probe could not run: verify the browser is installed."
+      fi
     fi
   else
     note "Browser probe skipped (--no-probe)."
@@ -263,6 +274,8 @@ check_webgl() {
           && note "(GLX evidence only - browser context not verified)"
       fi
     fi
+  elif [ -n "$DISPLAY_FOUND" ]; then
+    note "glxinfo not installed - GLX evidence unavailable (apt-get install mesa-utils)"
   fi
 
   case "$RENDER_TYPE" in
