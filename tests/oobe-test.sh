@@ -216,6 +216,16 @@ no_display_stub() {
 }
 no_display_stub
 
+# Stub the Browser action target from the start: the --auto/manual gating
+# subtests below dispatch the Browser action (zenity stub exit 0 = OK),
+# and a REAL x-www-browser (Firefox on the desktop image) would run
+# detached with HOME=$FX/home and keep writing its profile into $WORK
+# after the test exits - the EXIT trap's rm -rf then races it ("Directory
+# not empty") and /tmp/oobe-test.* dirs are left behind.
+printf '#!/bin/sh\necho "x-www-browser $*" >> "%s/x-www-browser.log"\n' "$FX" \
+  > "$FX/stub/x-www-browser"
+chmod +x "$FX/stub/x-www-browser"
+
 run_welcome() { # runs the installed script with fixture env + stub PATH
   env HOME="$FX/home" DESKTOP_DATA_DIR="$FX/data" \
       DESKTOP_WELCOME_MAX_WAIT=1 DESKTOP_WELCOME_LOCK="$FX/lock" \
