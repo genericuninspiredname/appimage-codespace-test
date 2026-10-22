@@ -150,6 +150,53 @@ final commit; that pass found and fixed one real test bug:
   module operates on the real `/home` paths). Pre-existing and
   unrelated to the OOBE; not fixed here to keep this branch scoped.
 
+## Third pass: review fixes + rebuild verification
+
+A second review of the second pass found and fixed three more issues:
+
+- **Container memory was mis-scaled 1024x when a cgroup limit exists.**
+  `build_body` fed cgroup BYTES (`memory.current`/`memory.max`) into
+  `gib()`, which expects `/proc/meminfo` KiB. Codespaces sets no memory
+  limit, so the live screen never hit the bug. New pure helper
+  `fmt_cgroup_mem` converts bytes (1 GiB/4 GiB -> `1.0/4.0 GiB`), exposed
+  as a `--cgroup-mem` test hook with hermetic regression tests.
+- **The WebGL line claimed "not tested yet"** - one-time state the
+  welcome cannot know: `desktop-doctor` (inspected on
+  `diagnostics/webgl-and-rendering`) keeps no result state (run-and-
+  report), and the welcome keeps none either. Wording now states that no
+  test result is kept here; README updated to match. The
+  `desktop-doctor` integration itself was re-verified against the real
+  diagnostics branch: `command -v desktop-doctor` + running it with no
+  arguments matches its documented contract.
+- **`tests/oobe-test.sh` leaked a real Firefox into the teardown.** The
+  `--auto`/manual gating subtests dispatch the Browser action before
+  the extra-buttons section installed its stubs, so the real
+  `x-www-browser` ran with the fixture `HOME`, kept writing its profile
+  into `$WORK` after the test exited, and raced the EXIT trap's `rm -rf`
+  ("Directory not empty" -> leftover `/tmp/oobe-test.*` dirs and orphan
+  Firefox processes on the host). The `x-www-browser` stub now exists
+  from phase-2 start. Verified in the live Codespace: zero leftover
+  dirs, zero fixture-home Firefox processes, zero stray dialogs.
+
+Rebuild verification (live Codespace, `gh codespace rebuild` twice):
+- The `.oobe-shown` marker (persistent volume) survived both rebuilds.
+- The documented rebuild semantics were exercised with the exact
+  lifecycle commands: postCreate-equivalent `setup.sh first-start` ->
+  "First start already complete - skipping first-start hooks" (the
+  persisted `.first-start-complete` marker keeps a rebuild in
+  normal-start territory), then `setup.sh normal-start` -> welcome hook
+  runs, marker present, no dialog auto-shown; `desktop-welcome --auto`
+  prints "welcome already shown - skipping" and exits 0.
+- Manual reopen after the rebuild shows the dialog (verified live with
+  the new WebGL wording rendering correctly).
+- Platform anomaly, not branch-related: the first rebuild produced a
+  container without the desktop-lite feature binaries (no fluxbox) and
+  an ssh-start that ran no lifecycle commands; the second rebuild
+  produced a complete container (fluxbox up, setup ran) but still
+  lacked `xdotool`/`import`, so the post-rebuild dialog was verified
+  via the zenity process command line instead of screenshots. Nothing
+  on this branch affects the image build.
+
 ## Limitations
 - "Windows host" is detected from WSL kernel markers; an ordinary Linux
   host without evidence reads "unknown". No Windows host was available
