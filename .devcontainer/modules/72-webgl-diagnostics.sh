@@ -162,7 +162,7 @@ function probe(){
   }catch(e){o.error=''+e}
   return o;
 }
-new Image().src='http://127.0.0.1:$PORT/p?d='+encodeURIComponent(JSON.stringify(probe()));
+new Image().src='http://127.0.0.1:$port/p?d='+encodeURIComponent(JSON.stringify(probe()));
 setTimeout(function(){window.close();},500);
 </script></body></html>
 PAGE
