@@ -211,32 +211,31 @@ change, the file is
 
 ## Steam
 
-Steam is preinstalled and works in the container — the client, sign-in, and
-library UI all render on the software-rendered desktop.
+**Status: blocked inside Codespaces by Steam itself — the client requires
+user namespaces, which Codespaces blocks.** Steam is preinstalled (official
+`steam.deb` plus the i386 multilib stack) and everything around the client
+is in place, but launching it inside a Codespace shows Steam's own error
+dialog: "Steam now requires user namespaces to be enabled" (the same
+kernel restriction that blocks Flatpak sandboxes here — see the Roblox
+section). No workaround was found or verified in this repo.
 
 - **Launch it:** right-click the desktop → **Steam** (or run `steam` in a
-  terminal).
-- **First run:** the client self-updates (a minute or two, ~400 MB), then
-  shows the sign-in window with account name/password or QR sign-in via the
-  Steam Mobile app.
-- **Games:** small/2D titles run acceptably under software rendering
-  (Mesa llvmpipe); modern 3D games are technically launchable but too slow
-  to enjoy on a 2-core codespace — treat this as client/library access.
-
-Technical notes: the Steam client refuses to run as root, so it runs as a
-dedicated `steam` user (same pattern as the `roblox` user) via a wrapper in
-`/usr/local/bin/steam`. It launches with `-no-cef-sandbox` because Codespaces
-blocks the user namespaces the embedded CEF sandbox needs — without it the
-whole UI fails to render. The client is 32-bit at heart, so the image adds
-the i386 multilib stack (`libgl1-mesa-dri:i386` and friends). The Steam
-home (`~/.steam` for the `steam` user, including the game library) is
-linked into the persistent desktop-data area, so installs and logins
-survive rebuilds.
+  terminal). Inside a Codespace you will see the namespace error dialog.
+  In the container sandbox where the steam branch was developed (user
+  namespaces allowed), the client and sign-in window did render; the same
+  is expected anywhere user namespaces are allowed, but that was not
+  re-verified here.
+- **What is verified everywhere:** the install (i386 stack + `steam.deb`),
+the dedicated non-root `steam` user, the launcher wrapper and the persistent
+home (`~/.steam` for the `steam` user, including the game library, linked
+into the desktop-data area so installs and logins survive rebuilds).
 
 ## Minecraft (PrismLauncher)
 
 [PrismLauncher](https://prismlauncher.org) is preinstalled (AppImage,
-extracted to `/opt/apps/prismlauncher`) and fully works in the container.
+extracted to `/opt/apps/prismlauncher`). Its setup wizard and main window
+are verified working in the container; playing Minecraft additionally
+requires a Microsoft account sign-in.
 
 - **Launch it:** right-click the desktop → **Prism Launcher** (or run
   `prismlauncher` in a terminal).
@@ -248,12 +247,11 @@ extracted to `/opt/apps/prismlauncher`) and fully works in the container.
   version — modern versions need Java 21+, which the image provides as a
   system fallback; the launcher also downloads its own Java per instance).
 
-Minecraft itself runs on software rendering (llvmpipe supports the GL 3.2+
-core profile modern versions need). Expect playable-but-modest FPS on a
-2-core machine; a 4-core machine (`-m standardLinux32gb`) helps a lot. The
-launcher data (`~/.local/share/PrismLauncher` — instances, accounts,
-settings) is linked into the persistent desktop-data area and survives
-rebuilds.
+Minecraft renders on software rendering (llvmpipe supports the GL 3.2+
+core profile modern versions need); actual gameplay performance on the
+2-core machine class was not measured in this repo. The launcher data
+(`~/.local/share/PrismLauncher` — instances, accounts, settings) is linked
+into the persistent desktop-data area and survives rebuilds.
 
 ## Making it faster
 
