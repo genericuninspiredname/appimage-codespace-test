@@ -192,7 +192,9 @@ build_body() {
     mem_cur=$(cat /sys/fs/cgroup/memory.current)
     mem_max=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)
     if [ "$mem_max" = "max" ] || [ -z "$mem_max" ]; then
-      mem_cont="$(gib "$mem_cur") GiB container used, no cgroup limit"
+      # no cgroup limit: the "current" figure then reflects the whole
+      # host, so it would be misleading as a container number
+      mem_cont="no container memory limit (host view above)"
     else
       mem_cont="$(gib "$mem_cur")/$(gib "$mem_max") GiB container (cgroup limit)"
     fi
