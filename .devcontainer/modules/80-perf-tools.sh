@@ -6,6 +6,16 @@
 # Uses: BIN_DIR.
 mkdir -p "$BIN_DIR"
 
+# xprintidle (real desktop-input idle for desktop-idle) is installed on
+# demand - once per image, guarded so hermetic test runs (which set
+# DESKTOP_STAMP_DIR) and non-root contexts skip it, and a failed install
+# never breaks setup (desktop-idle degrades gracefully without it).
+if [ -z "${DESKTOP_STAMP_DIR:-}" ] && [ "$(id -u)" = 0 ] \
+   && ! command -v xprintidle >/dev/null 2>&1; then
+  apt-get update -q >/dev/null 2>&1 || true
+  apt-get install -y -q --no-install-recommends xprintidle >/dev/null 2>&1 || true
+fi
+
 # --- desktop-stats: quick CPU + memory snapshot of the codespace. ---------
 cat > "$BIN_DIR/desktop-stats" <<'DS'
 #!/usr/bin/env bash

@@ -44,8 +44,7 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
   **Ctrl+Alt+Delete**) opens `htop` in a terminal — CPU, memory, and
   processes, with F9 to kill a stuck app.
 - **Resolution:** right-click → System → Set Resolution (the default is
-  1024x640 — ~36% fewer pixels than the old 1280x800, so the
-  software-rendered desktop does proportionally less work per frame;
+  1024x640 — ~36% fewer pixels than the old 1280x800;
   bump it back up there if you want more room). Fewer pixels = snappier.
 - **After a rebuild:** the desktop may have started before setup applied
   desktop tweaks — right-click → **Apply Desktop Updates** (or stop and start

@@ -68,8 +68,10 @@ commands (also in the Fluxbox menu):
 - A FAILED gated command no longer writes its stamp: the Sober overlay
   run keeps its original non-fatal behavior but retries on the next start
   instead of being silently recorded as done.
-- `desktop-idle` measures real desktop input idle via `xprintidle` (now
-  installed by `install-apps.sh`; verified working against TigerVNC), and
+- `desktop-idle` measures real desktop input idle via `xprintidle`
+  (installed on demand by 80-perf-tools.sh - once per image, guarded for
+  hermetic test runs, never fatal; verified working against TigerVNC),
+  and
   uses the documented `CODESPACE_NAME` variable (falling back to
   `GITHUB_CODESPACE_NAME`).
 - `20-browser.sh` writes the WebGL insurance prefs to both profile roots
@@ -80,8 +82,11 @@ commands (also in the Fluxbox menu):
   `CHANGES-perf.md`, and the rename avoids that merge collision. Their
   branch otherwise touches only the image build path (install-apps.sh
   core/optional split, Dockerfile, devcontainer build args) and does not
-  overlap this branch's module/setup/test changes; merging both later
-  needs one trivial resolution (add `xprintidle` to their core apt list).
+  overlap this branch's module/setup/test changes; `git merge-tree` now
+  merges the two branches cleanly (xprintidle installs on demand from
+  80-perf-tools.sh, so this branch's Dockerfile and install-apps.sh are
+  identical to master's and cannot collide with their image-build
+  restructure).
 
 ## What did NOT change
 
@@ -112,14 +117,19 @@ All testing was done inside a GitHub Codespace running on this branch
   returned. (Whether postStartCommand itself executed on an SSH-triggered
   start could not be confirmed - the stamp evidence shows the expensive
   work did not repeat, which is the requirement.)
-- **Rebuild:** `gh codespace rebuild` twice. The first rebuild hit a
-  transient image-build failure (Codespaces fell back to a base image
-  without any repo apps — no Dockerfile/install-apps.sh change on this
-  branch, and all pinned download URLs verified live; a known-infra
-  flake, not branch-related). The second rebuild built the full image
+- **Rebuild:** `gh codespace rebuild` twice. The first rebuild produced
+  an image that unexpectedly lacked the project's installed apps (cause
+  undetermined — at that point this branch had not modified the
+  Dockerfile or install-apps.sh, and all pinned download URLs verified
+  live; the subsequent rebuild succeeded, so the failure was not
+  reproducible). The second rebuild built the full image
   (Firefox/Prism/Sober present), the rebuild's own lifecycle re-ran all
-  gated work (fresh stamps), and the persisted `.first-start-complete`
-  marker correctly kept first-start hooks from re-running.
+  gated work (fresh stamps — the stamp directory lives in the image
+  layer), and the persisted `.first-start-complete` marker (under
+  /workspaces/desktop-data) correctly kept first-start hooks from
+  re-running. A third rebuild after the review fixes confirmed
+  `xprintidle` is now baked into the image and the same behavior
+  repeats.
 - **Idempotence test:** `tests/idempotence-test.sh` passes inside the
   Codespace. It needed one fix for a pre-existing gap (not branch-
   specific): run unisolated in a Codespace, the real setup had already
@@ -128,7 +138,24 @@ All testing was done inside a GitHub Codespace running on this branch
   that symlink around the run.
 - **Tools:** `desktop-stats` and `desktop-idle` produce correct output in
   the codespace; both menu entries appear exactly once in the Fluxbox
-  menu; all pre-existing menu entries are intact.
+  menu; all pre-existing menu entries are intact. On the rebuilt image
+  `desktop-idle` reports real desktop-input idle via `xprintidle`
+  ("idle for 19 minute(s)" against the untouched desktop), resolves the
+  codespace name via `CODESPACE_NAME`, and lists running desktop apps;
+  `desktop-stats` reports CPU load and memory.
+- **Failure/retry semantics (live):** with the overlay script made to
+  fail, setup prints "WARNING: Sober library overlay failed - not
+  stamped; will retry on the next start." and writes NO stamp; after
+  restoring the script the next run stamps it, and the run after that
+  skips it. Stamp inputs were verified to equal the currently deployed
+  flatpak commits (`app=7b6430c7…`, `rt=b715104d…`, `gl=d656ce83…,
+  25dbbb0c…` match the `<arch>/<branch>/active` link targets).
+- **Merge audit vs the sibling branch:** `git merge-tree` against
+  `origin/perf/image-size-and-apps` (DONE, unmerged) is clean: README
+  and devcontainer.json auto-merge, and this branch's Dockerfile and
+  install-apps.sh are identical to master's (xprintidle installs on
+  demand from 80-perf-tools.sh instead, so it cannot collide with their
+  core/optional restructure of the image build).
 - **Backup format:** `git diff origin/master..HEAD --
   .devcontainer/modules/10-persistence.sh
   .devcontainer/modules/40-profiles.sh` is empty; `desktop-backup` ran
@@ -141,9 +168,9 @@ All testing was done inside a GitHub Codespace running on this branch
 - The stamp directory lives outside `/workspaces`, so a manual `rm -rf`
   of it (or any change to the module/overlay/flatpak inputs) re-runs the
   gated work once — by design.
-- `gh codespace ssh`-triggered starts do not run postStartCommand (a
-  Codespaces CLI behavior; lifecycle commands run on editor/web starts),
-  so stop→start timing evidence uses stamp mtimes plus a manual
-  `normal-start` run.
+- Stop/start preserved the stamps and restored the desktop. A separate
+  manual normal-start run confirmed that already-current gated work
+  was skipped. Automatic lifecycle execution during the SSH-triggered
+  start could not be confirmed.
 - Startup timing measures the setup modules, not total codespace
   start time (which is dominated by the container start itself).

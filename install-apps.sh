@@ -13,7 +13,6 @@ dpkg --add-architecture i386
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
   libgl1-mesa-dri libegl-mesa0 libglx-mesa0 htop age flatpak python3 \
-  xprintidle \
   libgl1-mesa-dri:i386 libgl1:i386
 
 # ---------------------------------------------------------------------------
