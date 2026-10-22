@@ -287,8 +287,8 @@ comes from the `desktop-lite` feature.
 
 Everything else is **optional** and no longer installed by default —
 PrismLauncher/Minecraft is a game most users of this browser desktop don't
-need, and together with its dependencies (the system Java fallback) it
-made up a visible slice of the image:
+need, and it pulls in extra image dependencies (the system Java
+fallback):
 
 | App | token | What the token installs |
 |-----|-------|--------------------------|
@@ -332,18 +332,15 @@ runs only when it can actually change something:
 
 - **Once per codespace** (`postCreateCommand` → first-start): the
   first-start hooks, gated on the `.first-start-complete` marker.
-- **Once per container lifetime** (startup stamps in
-  `/var/lib/desktop-startup-stamps/`, wiped automatically by a rebuild):
-  expensive setup work is gated by stamps that record a hash of their
-  inputs, so a stop→start skips it; a rebuild re-runs it because a rebuild
-  recreates that state from the image.
 - **Every start** (`postStartCommand` → normal-start): only cheap,
   idempotent work — symlinks, launchers, menu/config managed blocks,
   restoring the desktop settings.
 
-The stamp records a hash of its inputs (the module, the overlay script,
-the flatpak commit ids), so editing any of them re-runs that work exactly
-once more. To force everything to re-run on the next start:
+`05-startup-gates.sh` also provides stamp helpers (in
+`/var/lib/desktop-startup-stamps/`, wiped automatically by a rebuild) that
+can gate expensive setup work so a stop→start skips it and a rebuild
+re-runs it. They are available infrastructure — no current module records
+a stamp — kept for future expensive work. To force gated work to re-run:
 `rm -rf /var/lib/desktop-startup-stamps` (or just rebuild).
 
 `setup.sh` prints a per-module timing line on every run, so you can see

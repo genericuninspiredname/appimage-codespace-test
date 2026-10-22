@@ -3,11 +3,11 @@
 # applications (opt-in via the OPTIONAL_APPS build arg; see README).
 #
 # This project runs entirely inside Codespaces, so optional apps are limited
-# to ones that actually work there. The former Roblox (Sober) and Steam
-# modules were removed: Roblox's anti-tamper blocks containers outright and
-# Steam's client needs kernel namespaces Codespaces forbids - both would
-# only ever work on an outside machine. PrismLauncher (Minecraft) runs fine
-# on the software-rendered desktop and stays.
+# to ones that work there. The former Roblox (Sober) and Steam modules were
+# removed: Roblox's anti-tamper blocks containers outright and Steam's client
+# needs kernel namespaces Codespaces forbids - both would only ever work on
+# an outside machine. PrismLauncher (Minecraft) support is retained as the
+# remaining optional app.
 #
 # The desktop UI is unchanged whether or not the app is installed: the menu
 # entry and this launcher always exist, and the launcher prints a
