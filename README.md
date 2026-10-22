@@ -409,6 +409,16 @@ documents):
 Deleting a codespace does not touch the repo — you can always create a new
 one (and **Back Up Files** restores your documents).
 
+## Diagnostics
+
+`desktop-doctor` (any terminal in the desktop, or right-click →
+**Diagnostics**) reports WebGL availability with a real context-creation
+probe in Firefox, software vs hardware rendering, the current desktop
+resolution and color depth, and CPU/memory usage with container limits
+labeled — plus numbered troubleshooting hints for anything that looks
+wrong. `desktop-doctor --help` shows options and exit codes; see
+`CHANGES-webgl-and-rendering.md` for details.
+
 ## Add more apps
 
 Two ways:
@@ -450,6 +460,7 @@ lexical order:
 | `50-menu.sh` | Fluxbox desktop menu entries |
 | `60-fluxbox.sh` | Wallpaper, init, style overlay, keys, shortcuts |
 | `70-diagnostics.sh` | git safe.directory fix, reapply to a running desktop |
+| `72-webgl-diagnostics.sh` | `desktop-doctor` tool: WebGL/rendering/display/CPU/memory diagnostics + menu entry |
 | `80-perf-tools.sh` | `desktop-stats` (CPU/memory) and `desktop-idle` (inactivity check) |
 
 After the modules it runs **lifecycle hooks** (see
