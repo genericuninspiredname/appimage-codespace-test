@@ -151,7 +151,9 @@ they persist across rebuilds but not across codespace deletion.
 ## Roblox
 
 **Status: blocked by Sober itself — the game client cannot run in any
-container.** The desktop ships with Roblox via
+container.** Roblox is **optional** (opt-in via the `roblox` token of the
+`OPTIONAL_APPS` build arg — see [Core vs optional applications](#core-vs-optional-applications-image-size));
+when enabled, the desktop ships it via
 [Sober](https://github.com/vinegarhq/sober) (the standard Linux Roblox
 runtime — it runs the Android client natively), and the launcher gets the
 app as far as it can go inside a Codespace: it runs as a dedicated non-root
@@ -212,7 +214,10 @@ change, the file is
 ## Steam
 
 **Status: blocked inside Codespaces by Steam itself — the client requires
-user namespaces, which Codespaces blocks.** Steam is preinstalled (official
+user namespaces, which Codespaces blocks.** Steam is **optional** (opt-in
+via the `steam` token of `OPTIONAL_APPS` — see
+[Core vs optional applications](#core-vs-optional-applications-image-size));
+when enabled it is preinstalled (official
 `steam.deb` plus the i386 multilib stack) and everything around the client
 is in place, but launching it inside a Codespace shows Steam's own error
 dialog: "Steam now requires user namespaces to be enabled" (the same
@@ -234,7 +239,10 @@ testing).
 
 ## Minecraft (PrismLauncher)
 
-[PrismLauncher](https://prismlauncher.org) is preinstalled (AppImage,
+[PrismLauncher](https://prismlauncher.org) is **optional** (opt-in via the
+`prism` token of `OPTIONAL_APPS` — see
+[Core vs optional applications](#core-vs-optional-applications-image-size));
+when enabled it is preinstalled (AppImage,
 extracted to `/opt/apps/prismlauncher`). Its setup wizard and main window
 are verified working in the container; playing Minecraft additionally
 requires a Microsoft account sign-in.
@@ -254,6 +262,37 @@ core profile modern versions need); actual gameplay performance on the
 2-core machine class was not measured in this repo. The launcher data
 (`~/.local/share/PrismLauncher` — instances, accounts, settings) is linked
 into the persistent desktop-data area and survives rebuilds.
+
+## Core vs optional applications (image size)
+
+The image build installs only the **core** applications by default:
+Firefox, the system software-OpenGL (llvmpipe) stack used for WebGL
+rendering, `htop` (Task Manager), and `age` (encrypted-profile backups).
+The desktop itself (Fluxbox, VNC, noVNC, file manager, editor, terminal)
+comes from the `desktop-lite` feature.
+
+Everything else is **optional** and no longer installed by default —
+Roblox/Sober, Steam, and PrismLauncher/Minecraft are games most users of
+this browser desktop don't need, and together with their dependencies
+(the Sober flatpak's GNOME runtime, the Steam i386 multilib stack, the
+system Java fallback) they made up the bulk of the image:
+
+| App | token | What the token installs |
+|-----|-------|--------------------------|
+| Roblox (Sober) | `roblox` | Sober flatpak + GNOME runtime, library-overlay script (also `flatpak`, `python3`) |
+| Steam | `steam` | official `steam.deb` + i386 multilib GL stack |
+| Minecraft | `prism` | PrismLauncher AppImage + `openjdk-21-jre` fallback |
+
+**To opt in:** edit `.devcontainer/devcontainer.json`, set the
+`OPTIONAL_APPS` build arg to a space-separated list of tokens (e.g.
+`"roblox steam prism"`), then rebuild the container (Codespaces menu →
+**Rebuild container**). Restarting is not enough — the list is applied at
+image-build time. Unknown tokens fail the build with a clear error.
+
+The desktop UI is unchanged either way: menu entries and launchers for
+optional apps always exist, and print a "not installed" hint when the
+app files are absent. Measured size/build-time impact is recorded in
+`CHANGES-perf.md`.
 
 ## Making it faster
 
