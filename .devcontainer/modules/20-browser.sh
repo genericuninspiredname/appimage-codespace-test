@@ -31,8 +31,14 @@ chmod +x "$XWWW"
 # (Mesa software rasterizer on the CPU). Force it on so blocklist entries
 # for software renderers can not silently disable it. Written to every
 # profile on each start; applied when Firefox next launches. ---
+# Both profile roots are covered: the classic ~/.mozilla/firefox layout
+# and the ~/.config/mozilla/firefox layout used by the pkgforge AppImage
+# build (perf/codespace-cost-controls: keep the WebGL insurance applied
+# wherever the profile actually lives).
 for prof in "$HOMEDIR"/.mozilla/firefox/*.default-release \
-            "$HOMEDIR"/.mozilla/firefox/*.default; do
+            "$HOMEDIR"/.mozilla/firefox/*.default \
+            "$HOMEDIR"/.config/mozilla/firefox/*.default-release \
+            "$HOMEDIR"/.config/mozilla/firefox/*.default; do
   [ -d "$prof" ] || continue
   # Managed prefs only: replace just our webgl lines, keep anything the
   # user authored in user.js.
