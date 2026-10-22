@@ -31,7 +31,11 @@ module instead of edits to shared ones):
     so `fluxbox-remote restart` actually works — without it the config
     re-apply that setup performs on every start (70-diagnostics.sh) was
     silently ignored, and taskbar/key changes only took effect after a full
-    codespace stop/start.
+    codespace stop/start. Note the first-boot bootstrap gap: on a brand-new
+    codespace fluxbox starts before postCreate writes init, so remote
+    actions are off for that first session and the new config applies on the
+    next desktop restart (from the second session on, it applies
+    immediately).
   - `~/.fluxbox/SHORTCUTS`: documents the new bindings (the block is
     re-appended after 60's rewrite on every setup run).
 
@@ -50,14 +54,29 @@ desktop menu from earlier work are preserved unchanged.
   menu / keys / overlay blocks survive.
 - `tests/codespace-verify.sh` — run inside the Codespace on this branch
   (it installs xdotool itself if missing and accepts both Xvnc and
-  Xtigervnc). It checks the generated config, opens several windows
-  (Mousepad, terminal, file manager) and verifies through the X server —
-  the same input path noVNC's websocket keyboard events feed — that
-  Alt+` cycles windows, Ctrl+Alt+Left/Right switches workspaces,
+  Xtigervnc). It checks the generated config, opens three known windows
+  (Mousepad, xterm titled "verify-terminal", Nautilus) and asserts each
+  one exists (xterm by window class, since bash renames its title), then
+  verifies through the X server — the same input
+  path noVNC's websocket keyboard events feed — that Alt+` cycles windows
+  (forward walk visits multiple windows; Alt+Shift+` walks the focus ring
+  back to the start), Ctrl+Alt+Left/Right switch workspaces,
   Ctrl+Alt+Shift+arrows move the active window between workspaces, the
   root menu is still bound, a repeat `setup.sh normal-start` run is
-  idempotent (config byte-identical), and `fluxbox-remote restart` keeps
-  every window open.
+  idempotent (config byte-identical), and a `fluxbox-remote restart` is
+  accepted, brings the desktop back with the taskbar config intact, and
+  the restarted desktop maps new windows.
+- Browser-to-noVNC test (cloud browser against the forwarded port 6080,
+  made public for the test and set back to private afterwards): with the
+  noVNC canvas focused, real key events (modifier keydowns + key) were
+  dispatched and verified to reach the remote desktop — Ctrl+Alt+Right
+  switched workspace 0→1, Ctrl+Alt+Left returned 1→0, Alt+` moved focus
+  to another window, and Ctrl+Alt+Shift+Right sent the active window to
+  the next workspace (verified via `_NET_WM_DESKTOP`). Mouse clicks
+  through the canvas were verified too (a dialog was closed and a file
+  manager item selected remotely). noVNC 1.6.0 does not filter synthetic
+  key events, so this exercises exactly the event sequence a user's
+  keyboard produces.
 - Visual verification via screenshots inside the Codespace: with several
   windows open the taskbar labels are readable, the focused window's
   titlebar and taskbar button are blue while inactive ones are dark grey,
@@ -72,9 +91,24 @@ desktop menu from earlier work are preserved unchanged.
   noVNC window-cycling key.
 - The font name `sans-10` resolves through fontconfig to the default
   sans-serif (DejaVu Sans in this image).
-- The key-injection tests go through the X server, which is the same input
-  path noVNC uses, but they cannot prove a specific browser passes every
-  combo (e.g. some browsers reserve Ctrl+Alt+arrows on some platforms).
-- TigerVNC's session opens a small "VNC config"/"xmessage" dialog pair on
-  each desktop start; they appear as taskbar buttons until closed. They
-  come from the VNC layer, not from this branch.
+- Fluxbox's window cycling walks the focus list (its native Alt+Tab
+  behavior): with three or more windows, next-then-prev is a ring walk,
+  not a two-window toggle, and a held-modifier forward walk may bounce
+  between the two most recent windows.
+- A fluxbox restart in this codespace restarts the whole desktop session
+  (the supervisor starts a new X server), so open app windows do not
+  survive it - this is the supervisor's design, not a taskbar regression.
+  The taskbar/window-switching config lives in persistent storage and is
+  intact after the restart (asserted by the verify script).
+- TigerVNC's session opens a small "VNC config" dialog on each desktop
+  start, and `fbsetbg` fails to set the wallpaper in this image (it wants
+  feh/wmsetbg/Esetroot; only ImageMagick's `display` is available) which
+  pops an xmessage error dialog and leaves the root window black. Both
+  come from the VNC/desktop layers, not from this branch; the wallpaper
+  failure is pre-existing on all branches.
+- On a brand-new codespace the first session cannot hot-apply config
+  (see the bootstrap note above); a stop/start or the automatic desktop
+  restart applies it.
+- A full Codespace rebuild (not just a container restart) was not
+  exercised end-to-end; the repeat-run and first-start paths are covered
+  by the local fixture tests, and postStart re-apply was verified live.

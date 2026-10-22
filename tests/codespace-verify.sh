@@ -3,7 +3,7 @@
 # Run INSIDE the codespace (gh codespace ssh -c taskbar-test -- bash /workspaces/appimage-codespace-test/tests/codespace-verify.sh)
 # Verifies: config files, noVNC serving, several windows open, key bindings
 # via X key injection (the same X input path noVNC uses), workspace switching,
-# taskbar/menu intact, idempotent repeat run, fluxbox restart survival.
+# taskbar/menu intact, idempotent repeat run, fluxbox restart behavior.
 set -u
 FLUX="$HOME/.fluxbox"
 REPO=/workspaces/appimage-codespace-test
@@ -56,15 +56,25 @@ fi
 # Detach every app (setsid + nohup + </dev/null): a first nautilus instance
 # stays in the foreground, and xdg-open waits on it, which would keep this
 # script's session alive forever. Detached windows also survive the ssh
-# session ending.
+# session ending. xterm is used instead of tilix: tilix crashes in this
+# image ('Key file does not have group "Instance"').
 launch() { setsid nohup "$@" >/dev/null 2>&1 < /dev/null & }
 launch mousepad /etc/hostname
-sleep 1
-launch tilix
+# poll briefly: apps occasionally take a moment to map their first window
+for i in 1 2 3 4 5 6; do sleep 1; xdotool search --name 'Mousepad' | grep -q . && break; done
+launch xterm -title "verify-terminal"
 sleep 2
 launch nautilus --new-window /
-sleep 3
-N=$(xdotool search --onlyvisible --name '' 2>/dev/null | wc -l)
+# nautilus needs several seconds (D-Bus activation) before its window maps
+for i in $(seq 1 12); do sleep 1; xdotool search --class nautilus 2>/dev/null | grep -q . && break; done
+# Assert the KNOWN windows exist (a raw window count also counts WM-internal
+# windows and would pass even if an app failed to launch). xterm is matched
+# by CLASS because bash's PROMPT_COMMAND renames the window to user@host:cwd,
+# overriding -title.
+chk "Mousepad window open"    "xdotool search --name 'Mousepad'  | grep -q ."
+chk "xterm window open"      "xdotool search --class xterm     | grep -q ."
+chk "Nautilus window open"   "xdotool search --class nautilus  | grep -q ."
+N=$( (xdotool search --class xterm; xdotool search --name 'Mousepad'; xdotool search --class nautilus) | sort -u | wc -l)
 chk "several windows open ($N)" "[ \"$N\" -ge 3 ]"
 
 echo "== 4. active/inactive window state =="
@@ -89,6 +99,20 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   if [ "$WN" = "$W1" ]; then BACK=yes; break; fi
 done
 chk "Alt+Shift+grave cycles back around to the first window" "[ -n \"\$BACK\" ]"
+# Forward traversal: repeated Alt+grave must reach several different windows
+# (fluxbox's focus list reorders as windows are focused, so the walk may
+# bounce between the two most recent windows - but it must visit at least
+# two distinct windows besides the start).
+SEEN=""
+WALK=$W1
+for i in 1 2 3 4 5 6; do
+  xdotool key alt+grave; sleep 0.5
+  WALK=$(xdotool getactivewindow)
+  case " $SEEN " in "* $WALK *") ;; *) SEEN="$SEEN $WALK";; esac
+done
+DISTINCT=$(echo $SEEN | wc -w)
+chk "Alt+grave repeated walk visits multiple windows ($DISTINCT)" "[ \"$DISTINCT\" -ge 2 ]"
+xdotool windowactivate $W1 2>/dev/null || true
 
 echo "== 6. workspace switching via Ctrl+Alt+Right/Left =="
 ws() { xprop -root _NET_CURRENT_DESKTOP 2>/dev/null | awk '{print $3}'; }
@@ -123,12 +147,25 @@ fi
 md5sum $FLUX/init $FLUX/keys $FLUX/overlay $FLUX/menu $FLUX/SHORTCUTS > /tmp/taskbar-md5-after.txt
 chk "config byte-identical after repeat run" "diff -q /tmp/taskbar-md5-before.txt /tmp/taskbar-md5-after.txt >/dev/null"
 
-echo "== 10. fluxbox restart keeps windows =="
-BEFORE=$(xdotool search --onlyvisible --name '' 2>/dev/null | wc -l)
-fluxbox-remote restart >/dev/null 2>&1 || DISPLAY=$DISPLAY fluxbox-remote restart >/dev/null 2>&1
+echo "== 10. fluxbox restart behavior =="
+# fluxbox-remote restart is accepted (allowRemoteActions) and the desktop
+# comes back. NOTE: in this codespace the desktop supervisor reacts to
+# fluxbox exiting by restarting the whole session (new X server), so app
+# windows do NOT survive a fluxbox restart - what must survive is the
+# taskbar/window-switching config, which lives in persistent storage.
+fluxbox-remote restart >/dev/null 2>&1
+RC=$?
+chk "fluxbox-remote restart accepted" "[ $RC -eq 0 ]"
+# wait for the supervisor to bring the desktop back up
+for i in $(seq 1 25); do sleep 1; pgrep -x fluxbox >/dev/null && break; done
 sleep 2
-AFTER=$(xdotool search --onlyvisible --name '' 2>/dev/null | wc -l)
-chk "windows survive restart ($BEFORE -> $AFTER)" "[ \"$AFTER\" -ge \"$BEFORE\" ]"
+chk "fluxbox running again" "pgrep -x fluxbox >/dev/null"
+md5sum $FLUX/init $FLUX/keys $FLUX/overlay $FLUX/menu $FLUX/SHORTCUTS > /tmp/taskbar-md5-after.txt
+chk "taskbar config intact after restart" "diff -q /tmp/taskbar-md5-before.txt /tmp/taskbar-md5-after.txt >/dev/null"
+# the restarted desktop must be usable: a new window maps
+launch xterm -title "verify-terminal"
+for i in $(seq 1 10); do sleep 1; xdotool search --class xterm 2>/dev/null | grep -q . && break; done
+chk "new window maps on restarted desktop" "xdotool search --class xterm | grep -q ."
 
 echo
 echo "RESULT: $PASS passed, $FAIL failed"
