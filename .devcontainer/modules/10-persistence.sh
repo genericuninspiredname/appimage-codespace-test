@@ -88,6 +88,10 @@ link_dir "$HOMEDIR/.fluxbox"                  "$DATA_DIR/private/fluxbox"
 # 3. Backup tool: explicitly backs up ~/Files (documents only, never
 #    profiles/credentials) to the desktop-data branch of this repo.
 #    Reinstalled on every setup run so fixes reach existing codespaces.
+#    storage/backup-and-profile-safety: failed pushes now report how many
+#    commits are waiting, a later run pushes them (and says so instead of
+#    "already backed up"), and a diverged remote is explained instead of
+#    being reported as a generic failure.
 # ---------------------------------------------------------------------------
 mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/desktop-backup" <<'BK'
@@ -97,10 +101,20 @@ DATA_DIR="${DESKTOP_DATA_DIR:-/workspaces/desktop-data}"
 cd "$DATA_DIR"
 git add -A -- files/ .gitignore
 committed=0
-if ! git diff --cached --quiet; then
-  git commit -qm "backup $(date -u +%Y-%m-%d_%H:%M)"
+# The commit is limited to the backup's own paths: anything else that was
+# already staged in this repo (e.g. by a user or another tool) is left staged,
+# NOT committed and pushed with the documents.
+if ! git diff --cached --quiet -- files/ .gitignore; then
+  git commit -qm "backup $(date -u +%Y-%m-%d_%H:%M)" -- files/ .gitignore
   committed=1
 fi
+# Fetch first: the pending-commit count below compares against the remote.
+git fetch -q origin desktop-data 2>/dev/null || true
+pending() { # commits on desktop-data that GitHub does not have yet
+  git rev-list --count FETCH_HEAD..HEAD 2>/dev/null \
+    || git rev-list --count --all --not --remotes 2>/dev/null || echo 0
+}
+PENDING=$(pending)
 # Always attempt the push: retries after earlier failures, even with no
 # new changes, so locally-committed backups reach GitHub eventually.
 # No automatic rebase/merge: a diverged remote is reported as a failure so
@@ -108,13 +122,25 @@ fi
 if git push -q -u origin desktop-data 2>/tmp/desktop-push.err; then
   if [ "$committed" = 1 ]; then
     echo "Backed up to GitHub (branch: desktop-data)."
+  elif [ "$PENDING" -gt 0 ] 2>/dev/null; then
+    echo "Pushed $PENDING pending backup commit(s) that an earlier run failed to upload."
   else
     echo "Everything already backed up."
   fi
 else
   echo "Push to GitHub FAILED:" >&2
   head -3 /tmp/desktop-push.err >&2
-  echo "Your changes are saved locally - run this again later to retry." >&2
+  echo "Your changes are saved locally ($PENDING commit(s) waiting to push)" >&2
+  echo "- run this again later to retry." >&2
+  # The one failure a plain retry cannot fix: someone else pushed backups
+  # (another codespace) and the remote has commits this codespace lacks.
+  if git rev-parse -q --verify FETCH_HEAD >/dev/null 2>&1 \
+     && ! git merge-base --is-ancestor FETCH_HEAD HEAD; then
+    echo "The desktop-data branch on GitHub has commits this codespace lacks" >&2
+    echo "(backed up from another codespace?). Inspect and resolve manually:" >&2
+    echo "  git -C $DATA_DIR log --oneline FETCH_HEAD..HEAD    # your local backups" >&2
+    echo "  git -C $DATA_DIR pull --rebase origin desktop-data  # then run this again" >&2
+  fi
   exit 1
 fi
 BK

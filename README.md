@@ -67,7 +67,12 @@ disk, including `/workspaces`. To keep your documents, click **Back Up Files**
 in the menu — it commits `~/Files` to the private `desktop-data` branch of this
 repo and pushes it to GitHub. A fresh codespace restores those files
 automatically on creation. Backups include only your documents in `~/Files` —
-browser profiles and credentials are deliberately never pushed.
+browser profiles and credentials are deliberately never pushed. If the push
+fails, your documents stay committed locally and the tool says how many
+commits are waiting — just run **Back Up Files** again later to retry (a
+retry pushes everything that is pending). If it reports that the branch on
+GitHub has commits this codespace lacks (backed up from another codespace),
+it tells you the exact `git` commands to inspect and resolve that.
 
 ## Encrypted profiles (password-protected saves)
 
@@ -75,15 +80,29 @@ For data you want to keep **private from the repository** - and to carry saves
 between codespaces run by **different users** - use the menu's **Encrypted
 Profiles** submenu (or `desktop-profile` in a terminal):
 
-- **Save Profile** packs `~/Files` plus the browser profile (bookmarks, game
-  saves - e.g. PokéRogue), encrypts it with your passphrase, and pushes only
-  the ciphertext to the same `desktop-data` branch.
-- **Restore Profile** decrypts a profile into the current codespace - from any
-  codespace of this repo, by any user who knows the passphrase. A wrong
-  passphrase restores nothing.
-- Each profile is independent: `profiles/<name>.tar.gz.age`, one passphrase
-  each. The default profile name is your GitHub login, so different users
-  don't collide.
+- **Save Profile** packs `~/Files` and the browser profile (bookmarks, game
+  saves - e.g. PokéRogue) as **two separate encrypted archives** — personal
+  documents in one, browser secrets in the other — and pushes only the
+  ciphertext to the same `desktop-data` branch. Use `--no-browser` to save
+  documents only.
+- **Restore Profile** decrypts a profile into the current codespace — from any
+  codespace of this repo, by any user who knows the passphrase. It decrypts
+  and **validates** the archives first (a wrong passphrase, a corrupted
+  archive, or an archive that is not actually a profile is rejected with
+  nothing changed), then asks for confirmation of the exact replacement plan
+  (type `restore`; `--yes` skips the prompt for scripts). Only then does it
+  replace local data — and a mid-restore failure rolls everything back.
+  `--files-only` restores documents without browser secrets; `--browser-only`
+  the reverse.
+- Each profile is independent: `profiles/<name>.tar.gz.age` (documents) plus
+  `profiles/<name>.browser.tar.gz.age` (browser), one passphrase each. The
+  default profile name is your GitHub login, so different users don't
+  collide. Older single archives (documents + browser in one) still restore
+  — the tool notes when it uses one; saving it again splits it into the two
+  parts.
+- `desktop-profile status` lists profiles and how many commits are waiting to
+  push; `desktop-profile push` retries a failed upload without creating a new
+  profile.
 
 How it protects you - and where its limits are:
 
@@ -115,7 +134,18 @@ convenient, but readable by anyone with access to the repo (and whatever it
 backed up earlier stays in the branch history). Use encrypted profiles for
 anything sensitive. Restoring a profile **replaces** `~/Files` and the browser
 profile (the previous state is kept in a local `.pre-restore-*` folder inside
-the data dir, which is never pushed).
+the data dir, which is never pushed; if a replace step fails mid-way, the
+tool rolls everything back to that state).
+
+**Retention and cleanup:** pre-restore backups pile up silently, so only the 3
+most recent `.pre-restore-*` folders are kept — each restore prunes the older
+ones and says so. Change the number with `DESKTOP_KEEP_PRE_RESTORE` in the
+codespace's environment. Two things are intentionally **not** cleaned up
+automatically: the `desktop-data` branch keeps every version ever backed up
+(that is what makes restores possible — but it also means deleted documents
+stay in the git history; sensitive material belongs in encrypted profiles),
+and old encrypted profiles are kept until you delete them yourself (`git rm`
+the file in `/workspaces/desktop-data/profiles` and push).
 
 **Editing files:** right-click → Text Editor (mousepad), or double-click files
 in the Files window. Save with Ctrl+S — files are written directly to the
