@@ -151,7 +151,9 @@ they persist across rebuilds but not across codespace deletion.
 ## Roblox
 
 **Status: blocked by Sober itself — the game client cannot run in any
-container.** The desktop ships with Roblox via
+container.** Roblox is **optional** (opt-in via the `roblox` token of the
+`OPTIONAL_APPS` build arg — see [Core vs optional applications](#core-vs-optional-applications-image-size));
+when enabled, the desktop ships it via
 [Sober](https://github.com/vinegarhq/sober) (the standard Linux Roblox
 runtime — it runs the Android client natively), and the launcher gets the
 app as far as it can go inside a Codespace: it runs as a dedicated non-root
@@ -212,7 +214,10 @@ change, the file is
 ## Steam
 
 **Status: blocked inside Codespaces by Steam itself — the client requires
-user namespaces, which Codespaces blocks.** Steam is preinstalled (official
+user namespaces, which Codespaces blocks.** Steam is **optional** (opt-in
+via the `steam` token of `OPTIONAL_APPS` — see
+[Core vs optional applications](#core-vs-optional-applications-image-size));
+when enabled it is preinstalled (official
 `steam.deb` plus the i386 multilib stack) and everything around the client
 is in place, but launching it inside a Codespace shows Steam's own error
 dialog: "Steam now requires user namespaces to be enabled" (the same
@@ -234,7 +239,10 @@ testing).
 
 ## Minecraft (PrismLauncher)
 
-[PrismLauncher](https://prismlauncher.org) is preinstalled (AppImage,
+[PrismLauncher](https://prismlauncher.org) is **optional** (opt-in via the
+`prism` token of `OPTIONAL_APPS` — see
+[Core vs optional applications](#core-vs-optional-applications-image-size));
+when enabled it is preinstalled (AppImage,
 extracted to `/opt/apps/prismlauncher`). Its setup wizard and main window
 are verified working in the container; playing Minecraft additionally
 requires a Microsoft account sign-in.

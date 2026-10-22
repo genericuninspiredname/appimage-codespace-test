@@ -14,7 +14,9 @@ libglx-mesa0 — the WebGL/diagnostics GL libraries), `htop` and `age`
 `OPTIONAL_APPS` Docker build arg (space-separated tokens, default empty):
 
 - `roblox` — Sober flatpak + GNOME runtime + library-overlay script
-  (also `flatpak` and `python3`, which nothing else needs)
+  (also `flatpak` and `python3`: the option explicitly requests python3
+  for its overlay script; the desktop's own dependencies may install and
+  use python independently — websockify on this image runs on python)
 - `steam` — official `steam.deb` + i386 multilib GL stack
   (`dpkg --add-architecture i386` only happens with this token)
 - `prism` — PrismLauncher AppImage + `openjdk-21-jre` fallback
@@ -36,25 +38,35 @@ a "not installed" hint when the app files are absent. No changes to
 ## Approximate size / build-time improvement
 
 Measured in the test Codespace (`perf-image-size-test-jj4vwqq797vj3j765`,
-2-core) with `du -sx /` — uncompressed root-filesystem usage of the
-running container, which includes the identical desktop-lite/sshd
-feature layers in both cases (docker is not available inside a
-Codespace, so this is the closest equivalent of image size):
+2-core) with `du -sx /` — the observed **live root-filesystem usage** of
+the running container, an approximate proxy for the avoided uncompressed
+optional payload (it includes the identical desktop-lite/sshd feature
+layers in both cases). Docker was not available inside this test
+Codespace, so a direct baseline-vs-candidate `docker image inspect`
+comparison was not possible; these are not registry download sizes:
 
 | Build | rootfs | installed pkgs |
 |-------|--------|----------------|
 | core only (this branch, default) | 2,269,120 KB (~2.16 GiB) | 632 |
-| core + all optional (`roblox steam prism`) | 5,987,124 KB (~5.71 GiB) | 912 |
+| core + all optional (`roblox steam prism`) | 5,847,212 KB (~5.57 GiB) | 912 |
 
-**≈ 3.48 GiB (~62%) smaller** by default; the optional payload is almost
-entirely the Sober/GNOME flatpak runtime, the i386 Steam stack, Java and
-the PrismLauncher AppImage.
+**≈ 3.41 GiB (3,578,092 KiB, ~61.2%) less installed content by
+default**; the optional payload is almost entirely the Sober/GNOME
+flatpak runtime, the i386 Steam stack, Java and the PrismLauncher
+AppImage. The core figure is consistent across a fresh creation
+(2,269,120 KB) and two rebuilds (2,269,104 / 2,269,112 KB); the
+all-optional figure is from the image-build path (a rebuild with the
+arg set — see below). A supplementary live run of `install-apps.sh`
+inside the core container gave 5,987,124 KB (slightly higher; apt
+caches from the live run).
 
-Build time (same 2-core machine class): the core-only image built during
-Codespace creation in ~4–5 min (cold, no cache); installing the full
-optional payload afterwards took a further ~4 min, so the default build
-saves roughly that much build time too. A cached rebuild (unchanged
-code) takes ~21 s. These are approximate, single-run figures.
+Build time (observed, same 2-core machine): the codespace was created
+and the core-only image built and started in ~4–5 min (02:17–02:21
+UTC; cache state of the base layers at creation is unknown). A rebuild
+with unchanged code (cached core image) took ~21 s; the rebuild that
+built the all-optional image took ~7.5 min (02:34–02:41 UTC). No
+further build-time claim is inferred — only the size difference above
+was measured.
 
 ## How it was tested (all inside the Codespace, on this branch)
 
@@ -64,17 +76,31 @@ code) takes ~21 s. These are approximate, single-run figures.
 - Core verified present and working: Firefox AppImage launched a real
   window on `:1` (verified as an X client), `htop`, `age` (encrypt/
   decrypt round-trip), llvmpipe GL libs (`libGL`, `swrast_dri.so`).
+- WebGL functionally verified through the real UI launcher
+  (`x-www-browser` on `:1`): a local test page created a WebGL 2.0
+  context, rendered a red clear, and read back the exact pixels
+  [255,0,0,255] — rendering works, not just library presence.
 - Optional verified absent by default: no `flatpak`, no `/app`, no
   `sober-overlay.py`, no `/opt/apps/prismlauncher`, no steam binary.
 - UI unchanged: menu entries (Roblox/Steam/Prism/Task Manager/Back Up
   Files) present exactly once; `steam`/`roblox`/`prismlauncher`
   launchers print the same "not installed" hints as before.
-- Optional path: `OPTIONAL_APPS="roblox steam prism" bash install-apps.sh`
-  exited 0 and deployed everything (Sober + GNOME runtime + overlay
-  script, libc6 hold, steam.deb, PrismLauncher, openjdk-21); a following
-  `setup.sh normal-start` created `/app/bin/sober` and applied the
-  library overlay (1165 libs) while the desktop stayed up (24-bit, noVNC
-  200) — identical to the master behavior.
+- Optional path via the real build-arg route: the codespace's working
+  checkout had `OPTIONAL_APPS: "roblox steam prism"` set in
+  `.devcontainer/devcontainer.json` (uncommitted), then
+  `gh codespace rebuild` rebuilt the image through the Dockerfile ARG
+  (~7.5 min). Result: all payloads deployed by the image build (Sober +
+  GNOME runtime + overlay script, libc6 hold, steam.deb, PrismLauncher,
+  openjdk-21, `/app/bin/sober` created by the postCreate setup, overlay
+  applied — the live overlay's "no version information available"
+  warnings are the documented master behavior), desktop up (fluxbox,
+  24-bit, noVNC 200), core and menu intact, rootfs 5,847,212 KB.
+  Restoring the arg to `""` and rebuilding again (~21 s, cached core
+  image) returned the codespace to the exact core-only state above.
+- Supplementary: `OPTIONAL_APPS="roblox steam prism" bash install-apps.sh`
+  run live in the core container also exited 0 and deployed everything;
+  a following `setup.sh normal-start` applied the overlay (1165 libs)
+  with the desktop staying up.
 - Validation: `OPTIONAL_APPS="bogus roblox"` fails with
   `ERROR: unknown OPTIONAL_APPS token 'bogus' (valid: roblox steam prism)`.
 - Repeat runs: `setup.sh normal-start` twice + a no-arg manual run — all
@@ -83,12 +109,16 @@ code) takes ~21 s. These are approximate, single-run figures.
   up, core intact, optional payload gone (default is really core-only),
   first-start marker preserved (hooks correctly not re-run), menu
   intact, rootfs back to ~2.16 GiB.
-- `tests/idempotence-test.sh`: all four lifecycle runs and both snapshot
-  diffs pass; one assertion ("steam persistence dir missing") fails,
-  **identically on master** — pre-existing, caused by the Codespace
-  environment (user namespaces are blocked, so the test's documented
-  fallback runs unisolated against the live `/home/steam/.steam` symlink
-  created by the real setup). Not caused by this branch.
+- `tests/idempotence-test.sh`: **the suite FAILS** on this branch and
+  **identically on master** at the "steam persistence dir missing"
+  assertion — pre-existing, not caused by this branch. The four
+  lifecycle runs and all snapshot-diff assertions before it pass; the
+  suite aborts there, so its Phase 2 (hook-failure semantics) is never
+  reached. Diagnosis (verified live): Codespaces blocks user
+  namespaces, so the test's documented fallback runs unisolated and the
+  fixture's `link_dir` for `/home/steam/.steam` returns early because
+  the real setup already created that symlink
+  (`→ /workspaces/desktop-data/private/steam-home/steam`).
 
 ## Files changed on this branch
 
@@ -101,12 +131,12 @@ code) takes ~21 s. These are approximate, single-run figures.
 
 ## Limitations
 
-- Size figures are rootfs measurements inside a Codespace, not
-  `docker image inspect` (docker is unavailable in Codespaces); they
-  include the identical devcontainer-feature layers in both variants.
-- The optional-apps path was verified by running `install-apps.sh`
-  inside the running Codespace rather than building a second image
-  (creating extra branches in the shared repo was out of scope); the
-  script is the same one the image build runs.
+- Size figures are live-rootfs measurements inside this test Codespace,
+  not `docker image inspect` (docker was not available in this test
+  Codespace); they include the identical devcontainer-feature layers in
+  both variants and are an approximation of the image-content difference.
+- The optional variant was verified by rebuilding the same Codespace
+  with the arg set in its working checkout (no separate codespace or
+  branch was created for it).
 - Steam/Sober gameplay remains blocked inside Codespaces by their own
   anti-container checks (documented in README; unchanged by this branch).
