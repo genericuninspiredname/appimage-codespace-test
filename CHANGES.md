@@ -79,11 +79,12 @@ other branches into it, so they can flow into `main` from this branch.
     `Prism Launcher` entries exactly once; **PrismLauncher 11.1.1**
     launches via the wrapper — Quick Setup wizard renders, and after
     finishing it the main window (instance list, toolbar, accounts menu)
-    renders fully. Note: the wizard re-appears on each launch while no
-    Microsoft account is configured (PrismLauncher's own first-run UX —
-    the account step is never "done" without an account); this is not a
-    persistence failure — the data dirs, themes, translations and
-    instance folders written by earlier runs all survive restarts.
+    renders fully. After the rebuild the Quick Setup wizard appeared
+    again on relaunch; whether the completed setup state reopens is
+    therefore UNVERIFIED — what is verified is that the data files
+    written by earlier runs (themes, translations, instance folders,
+    metacache, sentinels) all survived the rebuild. The wizard re-show
+    was not diagnosed further.
   - **Steam — blocked in Codespaces (new finding, a failed runtime test)**:
     the client bootstrap starts as the dedicated `steam` user but stops
     at Steam's own error dialog: "Steam now requires user namespaces to
@@ -95,8 +96,9 @@ other branches into it, so they can flow into `main` from this branch.
     container" was based on a sandbox where namespaces were allowed and
     does not hold in Codespaces; the README section was rewritten
     accordingly. The install, user, persistence and wrapper plumbing are
-    retained as a documented blocked component — verified working except
-    the client itself.
+    retained as a documented blocked component — verified in this
+    Codespace except the client itself, whose runtime test failed after
+    the dependency prompt was manually interrupted.
   - **Repeat run of the integrated coordinator (`d36e83e`)**, direct
     exit-code capture: `bash .devcontainer/setup.sh normal-start` →
     exit 0, menu byte-identical, all persistence symlinks unchanged,
@@ -119,6 +121,9 @@ other branches into it, so they can flow into `main` from this branch.
   user namespaces, which Codespaces blocks) — see the README Steam
   section. Everything except the client itself is verified there.
 - PrismLauncher is verified to the launcher UI (wizard + main window);
-  actually launching a Minecraft instance needs a Microsoft account.
+  actually launching a Minecraft instance needs a Microsoft account, and
+  whether a completed setup reopens after a rebuild is unverified (the
+  wizard re-appeared on relaunch; see above).
 - The PrismLauncher version is resolved to the latest release at image
-  build time (pinned fallback `11.1.1`); upgrades are deliberate rebuilds.
+  build time (fallback `11.1.1`) — a rebuild can pick up a newer release
+  without a source change (see the installer comment).
