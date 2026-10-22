@@ -179,23 +179,37 @@ A second review of the second pass found and fixed three more issues:
   dirs, zero fixture-home Firefox processes, zero stray dialogs.
 
 Rebuild verification (live Codespace, `gh codespace rebuild` twice):
-- The `.oobe-shown` marker (persistent volume) survived both rebuilds.
-- The documented rebuild semantics were exercised with the exact
-  lifecycle commands: postCreate-equivalent `setup.sh first-start` ->
-  "First start already complete - skipping first-start hooks" (the
-  persisted `.first-start-complete` marker keeps a rebuild in
-  normal-start territory), then `setup.sh normal-start` -> welcome hook
-  runs, marker present, no dialog auto-shown; `desktop-welcome --auto`
-  prints "welcome already shown - skipping" and exits 0.
+- The `.oobe-shown` marker (persistent volume) survived both real
+  rebuilds - directly observed after each one.
+- Lifecycle behavior after the rebuild was verified by invoking the
+  exact lifecycle commands manually (the same commands the lifecycle
+  would run): postCreate-equivalent `setup.sh first-start` -> "First
+  start already complete - skipping first-start hooks" (the persisted
+  `.first-start-complete` marker keeps a rebuild in normal-start
+  territory), then `setup.sh normal-start` -> welcome hook runs, marker
+  present, no dialog auto-shown. The automatic post-rebuild hook run
+  is evidenced only indirectly: no dialog appeared and the hook's log
+  file was created (but captured no skip line), so the automatic path
+  is not directly proven - the skip itself is, by direct invocation:
+  `desktop-welcome --auto` prints "welcome already shown - skipping"
+  and exits 0.
+- Final hook check on the live desktop (after the image anomaly below,
+  with screenshot tools reinstalled in the container): the real
+  `10-oobe.sh` was invoked with isolated data/lock/log paths. First
+  run: the dialog rendered with the final wording (screenshot-verified:
+  WebGL line complete and unclipped, all six buttons fully labeled);
+  Close wrote the marker and cleaned the lock. Second run: the hook
+  logged "welcome already shown - skipping" and showed nothing.
 - Manual reopen after the rebuild shows the dialog (verified live with
   the new WebGL wording rendering correctly).
-- Platform anomaly, not branch-related: the first rebuild produced a
-  container without the desktop-lite feature binaries (no fluxbox) and
-  an ssh-start that ran no lifecycle commands; the second rebuild
-  produced a complete container (fluxbox up, setup ran) but still
-  lacked `xdotool`/`import`, so the post-rebuild dialog was verified
-  via the zenity process command line instead of screenshots. Nothing
-  on this branch affects the image build.
+- Observed anomaly, cause not established (not diagnosed as a platform
+  defect): the first rebuild produced a container without the
+  desktop-lite feature binaries (no fluxbox) and an ssh-start that ran
+  no lifecycle commands; the second rebuild produced a working desktop
+  (fluxbox up, setup ran) but the container lacked `xdotool`/`import`
+  until reinstalled, so the post-rebuild dialog was verified via the
+  zenity process command line first and by screenshot after the tools
+  were reinstalled. Nothing on this branch affects the image build.
 
 ## Limitations
 - "Windows host" is detected from WSL kernel markers; an ordinary Linux
