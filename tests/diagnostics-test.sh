@@ -2,11 +2,13 @@
 # Unit tests for the desktop-doctor diagnostics tool
 # (branch diagnostics/webgl-and-rendering).
 #
-# Tests the PURE helpers (renderer classification, cgroup parsing, xdpyinfo
-# parsing) by sourcing the tool, plus module idempotence (install + menu
-# block) against an isolated fake $BIN_DIR/$HOMEDIR. No browser, X
-# display, or built image is needed - the full tool is exercised in the
-# codespace itself.
+# Tests the PURE helpers (renderer classification, cgroup parsing,
+# xdpyinfo parsing) by sourcing the tool, drives probe_webgl end-to-end
+# with a stub browser (success, context-unavailable, timeout, immediate
+# exit, temp-file cleanup), and checks module idempotence (install +
+# menu block) against an isolated fake $BIN_DIR/$HOMEDIR. No real
+# browser, X display, or built image is needed - the full tool is
+# exercised in the codespace itself.
 #
 # The tool is extracted straight from the module that embeds it, so the
 # tests always run the exact code that ships.
@@ -49,6 +51,9 @@ check hardware "virgl (virtual GPU)"
 check unknown ""
 check unknown "WebGL is disabled"
 check unknown "unknown"
+check unknown "Mozilla"
+check unknown "WebKit WebGL"
+check unknown "Mozilla Corporation"
 
 # --- parse_xdpy ---------------------------------------------------------------
 xdpy_out='name of display:    :1
@@ -98,6 +103,90 @@ printf '9223372036854771712\n' > "$WORK/cg1/memory/memory.limit_in_bytes"
 got=$(parse_cgroup_mem "$WORK/cg1")
 [ "$got" = "9994244 0" ] || fail "v1 huge limit should map to 0, got '$got'"
 pass "parse_cgroup_mem v1 huge limit -> 0"
+
+# --- probe_webgl end-to-end with a stub browser -------------------------------
+# The stub plays the browser: it fetches the served page and reports a
+# canned result (or not, per mode). DESKTOP_DOCTOR_PROBE_TIMEOUT keeps
+# the tests fast; DISPLAY is empty here so the probe runs headless.
+command -v curl >/dev/null 2>&1 || fail "curl needed for stub-browser tests"
+mkdir -p "$WORK/stub"
+cat > "$WORK/stub/browser" <<'STUB'
+#!/bin/bash
+# fake browser: reads the URL arg, fetches the page, reports a canned result
+url=""
+for a in "$@"; do case "$a" in http://*) url="$a";; esac; done
+[ -z "$url" ] && exit 1
+port=${url##*:}; port=${port%%/*}
+case "${STUB_MODE:-ok}" in
+  ok)
+    curl -sf "$url" >/dev/null || exit 1
+    sleep 0.3
+    enc=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' \
+      '{"ctx":"webgl2","renderer":"llvmpipe (LLVM 15.0.7, 256 bits)","vendor":"Mesa","masked":false}')
+    curl -sf "http://127.0.0.1:$port/r?d=$enc" >/dev/null
+    ;;
+  none)
+    curl -sf "$url" >/dev/null || exit 1
+    enc=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' \
+      '{"ctx":"none","masked":false}')
+    curl -sf "http://127.0.0.1:$port/r?d=$enc" >/dev/null
+    ;;
+  timeout)
+    curl -sf "$url" >/dev/null
+    sleep 30
+    ;;
+  exit)
+    exit 1
+    ;;
+esac
+exit 0
+STUB
+chmod +x "$WORK/stub/browser"
+
+export DESKTOP_FIREFOX="$WORK/stub/browser"
+export DESKTOP_DOCTOR_PROBE_TIMEOUT=3
+unset DISPLAY
+
+# success: a real renderer string must survive the round trip
+PROBE_CTX="" PROBE_RENDERER=""
+rc=0; probe_webgl || rc=$?
+[ "$rc" -eq 0 ] && [ "$PROBE_CTX" = "webgl2" ] \
+  || fail "ok-stub: rc=$rc ctx=$PROBE_CTX"
+[ "$PROBE_RENDERER" = "llvmpipe (LLVM 15.0.7, 256 bits)" ] \
+  || fail "ok-stub: renderer mangled: '$PROBE_RENDERER'"
+pass "probe_webgl ok-stub -> webgl2 + renderer"
+
+# context-unavailable: the page reports honestly that no context was created
+PROBE_CTX=""
+rc=0; STUB_MODE=none probe_webgl || rc=$?
+[ "$rc" -eq 0 ] && [ "$PROBE_CTX" = "none" ] \
+  || fail "none-stub: rc=$rc ctx=$PROBE_CTX"
+pass "probe_webgl none-stub -> ctx=none"
+
+# timeout: page fetched, no result -> rc 2, page fetch detected
+rc=0; STUB_MODE=timeout probe_webgl || rc=$?
+[ "$rc" -eq 2 ] || fail "timeout-stub: rc=$rc (want 2)"
+[ "$PROBE_PAGE_FETCHED" = "1" ] || fail "timeout-stub: page fetch not detected"
+pass "probe_webgl timeout-stub -> rc=2, page fetch detected"
+
+# immediate exit: browser dies at once -> rc 2, early exit detected
+rc=0; STUB_MODE=exit probe_webgl || rc=$?
+[ "$rc" -eq 2 ] || fail "exit-stub: rc=$rc (want 2)"
+[ "$PROBE_EARLY_EXIT" = "1" ] || fail "exit-stub: early exit not detected"
+pass "probe_webgl exit-stub -> rc=2, early exit detected"
+
+# cleanup: the probe must not leave temp files behind
+if ls /tmp/desktop-doctor.* >/dev/null 2>&1; then
+  fail "probe left temp files behind: $(ls /tmp/desktop-doctor.* | head -3)"
+fi
+pass "probe cleans up its temp files"
+
+# missing browser: rc 1
+export DESKTOP_FIREFOX="$WORK/stub/missing-browser"
+rc=0; probe_webgl || rc=$?
+[ "$rc" -eq 1 ] || fail "missing-browser: rc=$rc (want 1)"
+pass "probe_webgl missing-browser -> rc=1"
+unset DESKTOP_FIREFOX DESKTOP_DOCTOR_PROBE_TIMEOUT
 
 # --- module idempotence: install + menu managed block ------------------------
 export BIN_DIR="$WORK/bin" HOMEDIR="$WORK/home"

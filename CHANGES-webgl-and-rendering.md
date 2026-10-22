@@ -11,11 +11,11 @@ untouched.
 
 | Area | What you get |
 |------|--------------|
-| WebGL | Real context-creation probe in the app's browser (Firefox, headless, its normal security settings — nothing is disabled to make the probe pass), plus the managed `webgl.*` prefs from every Firefox profile |
-| Rendering | The unmasked renderer string, classified as **software** (llvmpipe/softpipe/swrast/SwiftShader/…), **hardware**, or **unknown** when the string is masked or the probe is inconclusive; GLX (`glxinfo -B`) evidence on the desktop display as corroboration |
-| Display | Current desktop resolution and color depth via `xdpyinfo` on the live X display (a virtual Xvnc/TigerVNC display is labeled as such); works from SSH too by probing `:1`/`:0` |
-| CPU | Usage sampled over 1 s from `/proc/stat` (host view, labeled), visible core count, load average, and the container's cgroup CPU quota — scopes are labeled, host counters are never presented as container limits |
-| Memory | Container usage vs cgroup limit (with percent and swap), plus host totals from `/proc/meminfo`, clearly labeled |
+| WebGL | Context-creation probe in the app's browser: the probe page is served by a local one-shot server, loaded by the browser on the desktop display when one is reachable (the same rendering path as a normal session; headless otherwise), and reports back which context type it could create. The probe distinguishes "page never loaded" from "page loaded, no result" from "browser exited immediately". Firefox's managed `webgl.*` prefs are listed too. |
+| Rendering | The renderer string, classified as **software** (llvmpipe/softpipe/swrast/SwiftShader/…), **hardware**, or **unknown** — masked or generic renderer strings (no `WEBGL_debug_renderer_info`) stay **unknown**, never "hardware". GLX (`glxinfo -B`) evidence on the desktop display as corroboration when the browser probe is inconclusive. |
+| Display | Current desktop resolution and color depth via `xdpyinfo` on the live X display; a TigerVNC/Xvnc virtual display is labeled as such. Works from SSH too by probing `:1`/`:0`. |
+| CPU | Usage sampled over 1 s from `/proc/stat` (host view, labeled), visible core count, load average, and the container's cgroup CPU quota — scopes are labeled, host counters are never presented as container limits. |
+| Memory | Container usage vs cgroup limit (with percent and swap), plus host totals from `/proc/meminfo`, clearly labeled. |
 
 Every failing or degraded check produces a numbered troubleshooting hint
 at the end (restart the browser, where the desktop lives, how to lower
@@ -30,23 +30,31 @@ desktop-doctor --help       # usage and exit codes
 ```
 
 Exit codes: `0` = all checks ran and none failed (warnings allowed);
-`1` = at least one check failed or could not run.
+`1` = at least one check failed or could not run (including a default
+WebGL probe that produced no result — `--no-probe` is the explicit,
+allowed skip); `2` = bad command-line option.
 
 Menu: right-click desktop → **Diagnostics** (opens the tool in a
 terminal), next to the existing Task Manager entry.
 
 ## Design notes
 
-- The WebGL probe launches the real Firefox (`/opt/apps/firefox/AppRun`,
-  overridable via `DESKTOP_FIREFOX`) headless with a throwaway profile.
-  A small local page tries `webgl2` → `webgl` → `experimental-webgl`,
-  reads `WEBGL_debug_renderer_info`, and reports back to a one-shot
-  local collector; the browser is killed and the temp profile deleted
-  afterwards. No security flags are set or cleared — the probe either
-  works with the browser's normal configuration or reports honestly.
-- "Could not run the probe" is reported as **unknown**, never as a
-  passing WebGL check. A missing renderer string is **unknown**, never
-  silently "hardware".
+- The probe serves its page from a local one-shot server (ephemeral
+  port, same-origin result endpoint) and launches the app's browser
+  against it — on the desktop display when one is reachable, headless
+  otherwise; the report states which mode ran. A browser window may
+  flash briefly on the desktop during a display-mode probe.
+- Failure modes are distinguished: browser missing (rc 1) vs launched
+  but no result (rc 2), page never fetched vs fetched without result,
+  and immediate browser exit (with the first stderr lines shown).
+- No security flags are set or cleared by the tool — the browser runs
+  with its normal configuration, and the probe reports honestly when it
+  cannot obtain a result. (During environment diagnosis outside the
+  tool, the project launcher's existing env vars were tried; nothing
+  of that kind ships here.)
+- "Could not run the probe" is reported as a failed check (nonzero
+  exit), never as a passing WebGL result. A masked renderer string is
+  **unknown**, never silently "hardware".
 - CPU percentage is a sampled counter interval, not the load average
   (both are reported, labeled). Memory distinguishes host totals from
   the container's cgroup limit.
@@ -56,42 +64,55 @@ terminal), next to the existing Task Manager entry.
 - `.devcontainer/modules/72-webgl-diagnostics.sh` (new) — installs the
   tool into `$BIN_DIR` (idempotent: rewritten on every setup run) and
   the menu entry (managed block, replaced wholesale, never duplicated).
-- `README.md` — module table row + short Diagnostics section.
 - `tests/diagnostics-test.sh` (new) — unit tests for the pure helpers
-  (renderer classification, cgroup parsing, display parsing) that do
-  not need the built image; the full tool is exercised in the codespace
-  itself.
+  (renderer classification incl. masked strings, cgroup parsing, xdpyinfo
+  parsing) plus end-to-end tests of `probe_webgl` with a stub browser
+  (success, context-unavailable, timeout, immediate exit, temp-file
+  cleanup, missing browser) and module idempotence. These run without
+  the built image; the full tool is exercised in the codespace itself.
+- `README.md` — module table row + short Diagnostics section (small
+  additive edits; other branches also touch README, so textual merge
+  conflicts are possible there and left to the maintainer).
+- `CHANGES-webgl-and-rendering.md` — this file.
 
 ## Test results (branch `diagnostics/webgl-and-rendering`)
 
-Verified locally (bash syntax check, `tests/diagnostics-test.sh`, and the
-existing `tests/idempotence-test.sh` — all pass), and in a real
-Codespace built from this branch:
-
-- `desktop-doctor` full run: display section verified (1280x800,
-  24-bit, virtual VNC display), CPU and memory sections verified with
-  labeled host/container scopes; exit code and repeat runs behave as
-  documented (`--no-probe`, unknown option rejection, second run).
-- Setup re-run on a live codespace (`normal-start` after pulling a
-  fix) applies the tool cleanly without disturbing the running desktop.
-- WebGL probe: **the success path could not be verified in the test
-codespace, and this is a pre-existing environment issue, not a gap in
-the tool**: the Firefox AppImage in this environment opens a window but
-never renders any page (local `file://` and remote URLs alike), on
-master as well as on this branch (verified on a separate master
-codespace), with the project launcher and with fluxbox-remote, and with
-every sandbox env variation tried. The probe therefore times out, and
-the tool reports exactly that: "browser launched but never loaded the
-probe page", with a hint that a browser unable to open any page is a
-browser-build problem, not a WebGL-specific one. No security flags
-were added or cleared to make the probe pass — the browser runs with
-its normal configuration.
+- `tests/diagnostics-test.sh`: all pass, locally and inside the
+  codespace — pure helpers, stub-browser end-to-end probe paths, and
+  module idempotence (install + menu block appear exactly once).
+- `tests/idempotence-test.sh` (existing suite): passes locally (4
+  runs, byte-identical state). In the codespace it fails at the
+  pre-existing "steam persistence dir missing" check — that failure
+  reproduces identically on master's own checkout in the same
+  environment, so it is not caused by this branch.
+- Codespace built from this branch: `desktop-doctor` verified — display
+  section (1280x800, 24-bit, virtual VNC label), CPU and memory
+  sections with labeled host/container scopes, repeat runs,
+  `--no-probe`, unknown-option rejection, menu entry, `--help`.
+- Startup / re-run / rebuild: postStart re-runs setup cleanly over a
+  live desktop; a real `gh codespace rebuild` re-created the container
+  and reinstalled the tool via setup (a first rebuild attempt produced
+  a degraded container with the plain base image — observed once,
+  cause not established; the second rebuild built the project image
+  correctly).
+- WebGL probe in the codespace: the browser launched but never loaded
+  the probe page, so the positive path (context available, renderer
+  reported) could not be observed in this environment. The same
+  no-render behavior was observed on a separate master codespace with
+  the project launcher, with fluxbox-remote, and for plain `file://`
+  and remote URLs — cause not established (it predates this branch).
+  In that situation the tool reports the failed check honestly
+  (nonzero exit, targeted hint) rather than claiming WebGL works or
+  does not. The full success and failure paths are covered by the
+  stub-browser tests.
 
 Remaining limitations:
 
-- The WebGL probe's positive path ("available", renderer reported) is
-  implemented but unverified in this environment for the reason above.
+- The WebGL probe's positive path is implemented and unit-tested with
+  a stub browser, but was not observed with the real browser in this
+  environment (see above).
 - `glxinfo` is not part of the image (not in `install-apps.sh` on
-  master), so GLX evidence appears only when it is installed manually.
+  master), so GLX evidence appears only when it is installed manually;
+  the tool notes this.
 - CPU/memory read the host `/proc` (Codespaces containers see the host
   view); the tool labels the scopes rather than guessing.
