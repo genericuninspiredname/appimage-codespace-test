@@ -7,10 +7,10 @@ renders cleanly on a software-rendered 2-core machine.
 
 **Contents:** [Start it](#start-it) · [Use the desktop](#use-the-desktop) ·
 [First-run welcome screen](#first-run-welcome-screen) ·
-[Linux and Windows environments](#linux-and-windows-environments) ·
+[The codespace environment](#the-codespace-environment) ·
 [Files and persistence](#files-and-persistence) ·
 [Encrypted profiles](#encrypted-profiles-password-protected-saves) ·
-[What to expect](#what-to-expect) · [Roblox](#roblox) · [Steam](#steam) ·
+[What to expect](#what-to-expect) ·
 [Minecraft](#minecraft-prismlauncher) ·
 [Core vs optional applications](#core-vs-optional-applications-image-size) ·
 [Making it faster](#making-it-faster) ·
@@ -105,7 +105,7 @@ marker lives in the persistent data dir but is never committed by
 `desktop-backup`, so a **rebuild** does not re-show it, while a **new
 codespace restored from a backup** shows it again.
 
-## Linux and Windows environments
+## The codespace environment
 
 **This desktop is always Linux.** Codespaces run Linux containers only —
 GitHub documents that Windows and macOS are
@@ -115,22 +115,11 @@ and the container limits described in [What to expect](#what-to-expect).
 
 The welcome screen's **Environment** line reflects that: it reads
 `Linux (GitHub Codespace)` in a codespace, from Codespaces-provided
-evidence (never a guess). The same detection code can also recognize a
-Windows host running this repo's setup under WSL (`Windows host (WSL)`,
-from kernel markers) — that path is covered by the repo's unit tests but
-was **not verified end-to-end** (no Windows host was available during
-testing), so treat it as best-effort. With no evidence at all it says
+evidence (never a guess). With no evidence at all it says
 `Unknown host`.
 
-**Windows appears in two other places, both documentation-only:**
-
-- The [`windows/` directory](windows/) describes a **separate physical
-  Windows machine** for actually playing Roblox (see
-  [Roblox](#roblox)). Nothing in it was verified on Windows, and none of
-  it changes what the codespace does.
-- The backup and profile tools (`desktop-backup`, `desktop-profile`) only
-ever see this codespace's Linux filesystem — they never touch a Windows
-host, and must not be pointed at one.
+The backup and profile tools (`desktop-backup`, `desktop-profile`) only
+ever see this codespace's Linux filesystem.
 
 ## Files and persistence
 
@@ -261,101 +250,6 @@ they persist across rebuilds but not across codespace deletion.
 - Your local webcam/mic are not available inside the desktop — it's a remote
   view, not a web app.
 
-## Roblox
-
-**Status: blocked by Sober itself — the game client cannot run in any
-container.** Roblox is **optional** (opt-in via the `roblox` token of the
-`OPTIONAL_APPS` build arg — see [Core vs optional applications](#core-vs-optional-applications-image-size));
-when enabled, the desktop ships it via
-[Sober](https://github.com/vinegarhq/sober) (the standard Linux Roblox
-runtime — it runs the Android client natively), and the launcher gets the
-app as far as it can go inside a Codespace: it runs as a dedicated non-root
-user with the Flatpak environment replicated, the window opens and the
-onboarding UI starts — then Sober's built-in anti-tamper kills the actual
-Roblox game client.
-
-This is not a bug in this repo and cannot be fixed here:
-
-- Sober's `libloader.so` (a closed-source anti-tamper layer) validates its
-  environment and deliberately crashes (a `UD2` trap with "FATAL:
-  Unrecognized Instruction") in **any** container or VM. Verified in this
-  Codespace **and** in an independent unprivileged container with a real
-  Flatpak sandbox, non-root user, no Docker seccomp filter, untraced —
-  same crash.
-- The Sober maintainers confirm this is intentional: crashes in "a virtual
-  machine, container, or anything else designed to automate gameplay" are
-  [expected behavior](https://github.com/vinegarhq/sober/issues/2475).
-- The exact check lives in obfuscated code and has not been publicly
-  identified; the game child also refuses to run as root (fixed here by the
-  dedicated `roblox` user) and anti-debug is built in (it `ptrace`s itself
-  to its supervisor, blocking debuggers).
-
-What still works: the launcher, the Sober window, and the onboarding UI.
-If Sober ever drops or relaxes the container check, this setup should work
-as originally intended — everything else (environment, user, display,
-persistence) is in place. Alternatives while it is blocked:
-
-- run Roblox on a real (non-container) Linux machine with Sober, or on
-  Windows/macOS/mobile;
-- a cloud gaming/streaming service (now.gg works from the desktop's
-  Firefox but has ads and was rejected for this repo);
-- a full VM with KVM elsewhere — note Codespaces has no `/dev/kvm`, and
-  QEMU without KVM is far too slow for a 3D game, so a VM inside a
-  Codespace is not viable.
-
-- **Launch it:** right-click the desktop → **Roblox** (or run `roblox` in a
-  terminal). It runs as the dedicated `roblox` user (never root — Sober
-  refuses root), with the Flatpak sandbox environment replicated and its
-  own D-Bus session.
-- **Data persistence:** the Sober data dir
-  (`/home/roblox/.var/app/org.vinegarhq.Sober`) is linked into the
-  persistent `/workspaces/desktop-data` area, so any state survives
-  rebuilds.
-- **Sound:** the browser tab streams video only, so Roblox plays silently
-  (audio isn't carried through noVNC).
-
-**Separate Windows profile:** the practical way to actually play Roblox is a
-real Windows machine, not the Codespace. The [`windows/` directory](windows/)
-has a documentation-only profile for that — supported Windows host
-requirements, setup, remote-access options, performance tuning, and rules
-for keeping Roblox data separate from this Codespace (it adds no code and
-changes no Codespace behavior; nothing Windows was verified).
-
-Technical note: Sober is a Flatpak, but Codespaces blocks the kernel
-namespaces its sandbox needs — so the image installs the flatpak, overlays
-its runtime libraries (glibc included) onto the system, mirrors the app
-tree to a real `/app` directory (the anti-tamper checks `/proc/self/exe`),
-and the launcher runs the app binary directly as the `roblox` user with the
-flatpak environment variables set. If Sober ever needs a manual config
-change, the file is
-`/home/roblox/.var/app/org.vinegarhq.Sober/config/sober/config.json`
-(delete it to reset to defaults).
-
-## Steam
-
-**Status: blocked inside Codespaces by Steam itself — the client requires
-user namespaces, which Codespaces blocks.** Steam is **optional** (opt-in
-via the `steam` token of `OPTIONAL_APPS` — see
-[Core vs optional applications](#core-vs-optional-applications-image-size));
-when enabled it is preinstalled (official
-`steam.deb` plus the i386 multilib stack) and everything around the client
-is in place, but launching it inside a Codespace shows Steam's own error
-dialog: "Steam now requires user namespaces to be enabled" (the same
-kernel restriction that blocks Flatpak sandboxes here — see the Roblox
-section). No workaround was found or verified in this repo.
-
-- **Launch it:** right-click the desktop → **Steam** (or run `steam` in a
-  terminal). Inside a Codespace you will see the namespace error dialog.
-  In the container sandbox where the steam branch was developed (user
-  namespaces allowed), the client and sign-in window did render; that
-  result was not re-verified here.
-- **Verified in this Codespace:** the install (i386 stack + `steam.deb`),
-the dedicated non-root `steam` user, the launcher wrapper and the persistent
-home (`~/.steam` for the `steam` user, including the game library, linked
-into the desktop-data area so installs and logins survive rebuilds). The
-client runtime itself was not verified here (it failed at the namespace
-check; its interactive dependency prompt was dismissed manually during
-testing).
 
 ## Minecraft (PrismLauncher)
 
@@ -392,20 +286,17 @@ The desktop itself (Fluxbox, VNC, noVNC, file manager, editor, terminal)
 comes from the `desktop-lite` feature.
 
 Everything else is **optional** and no longer installed by default —
-Roblox/Sober, Steam, and PrismLauncher/Minecraft are games most users of
-this browser desktop don't need, and together with their dependencies
-(the Sober flatpak's GNOME runtime, the Steam i386 multilib stack, the
-system Java fallback) they made up the bulk of the image:
+PrismLauncher/Minecraft is a game most users of this browser desktop don't
+need, and it pulls in extra image dependencies (the system Java
+fallback):
 
 | App | token | What the token installs |
 |-----|-------|--------------------------|
-| Roblox (Sober) | `roblox` | Sober flatpak + GNOME runtime, library-overlay script (also `flatpak`, `python3`) |
-| Steam | `steam` | official `steam.deb` + i386 multilib GL stack |
 | Minecraft | `prism` | PrismLauncher AppImage + `openjdk-21-jre` fallback |
 
 **To opt in:** edit `.devcontainer/devcontainer.json`, set the
 `OPTIONAL_APPS` build arg to a space-separated list of tokens (e.g.
-`"roblox steam prism"`), then rebuild the container (Codespaces menu →
+`"prism"`), then rebuild the container (Codespaces menu →
 **Rebuild container**). Restarting is not enough — the list is applied at
 image-build time. Unknown tokens fail the build with a clear error.
 
@@ -441,19 +332,15 @@ runs only when it can actually change something:
 
 - **Once per codespace** (`postCreateCommand` → first-start): the
   first-start hooks, gated on the `.first-start-complete` marker.
-- **Once per container lifetime** (startup stamps in
-  `/var/lib/desktop-startup-stamps/`, wiped automatically by a rebuild):
-  the Sober library overlay, the `/app` hardlink tree, the runtime-share
-  copies, and the recursive `chown` over the Sober/Steam data dirs. A
-  stop→start skips all of it; a rebuild re-runs it because a rebuild
-  recreates that state from the image.
 - **Every start** (`postStartCommand` → normal-start): only cheap,
   idempotent work — symlinks, launchers, menu/config managed blocks,
   restoring the desktop settings.
 
-The stamp records a hash of its inputs (the module, the overlay script,
-the flatpak commit ids), so editing any of them re-runs that work exactly
-once more. To force everything to re-run on the next start:
+`05-startup-gates.sh` also provides stamp helpers (in
+`/var/lib/desktop-startup-stamps/`, wiped automatically by a rebuild) that
+can gate expensive setup work so a stop→start skips it and a rebuild
+re-runs it. They are available infrastructure — no current module records
+a stamp — kept for future expensive work. To force gated work to re-run:
 `rm -rf /var/lib/desktop-startup-stamps` (or just rebuild).
 
 `setup.sh` prints a per-module timing line on every run, so you can see
@@ -531,8 +418,7 @@ lexical order:
 | `05-startup-gates.sh` | Startup stamps: skip expensive work that already ran this container lifetime |
 | `10-persistence.sh` | Persistent data dir, home symlinks, `desktop-backup` |
 | `20-browser.sh` | Browser launcher, WebGL prefs, namespaces-check flag |
-| `30-roblox.sh` | Optional Roblox/Sober setup (image-dependent steps guarded; user, links and launchers always installed) |
-| `35-steam.sh` | Optional Steam setup (same pattern: guarded image steps, always-installed user/links/launcher) |
+| `30-optional-apps.sh` | Launchers + persistent data for optional apps (PrismLauncher) |
 | `40-profiles.sh` | Encrypted save profiles (`desktop-profile`) |
 | `50-menu.sh` | Fluxbox desktop menu entries |
 | `60-fluxbox.sh` | Wallpaper, init, style overlay, keys, shortcuts |

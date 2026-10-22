@@ -25,15 +25,6 @@ for cmd in useradd chown xhost; do
   printf '#!/bin/sh\nexit 0\n' > "$WORK/stub/$cmd"
   chmod +x "$WORK/stub/$cmd"
 done
-cat > "$WORK/stub/id" <<'EOF'
-#!/bin/sh
-case " $* " in
-  *" roblox"*|*"roblox "*) echo 4242; exit 0;;
-  *" steam"*|*"steam "*)  echo 4243; exit 0;;
-esac
-exec /usr/bin/id "$@"
-EOF
-chmod +x "$WORK/stub/id"
 
 cp -r "$REPO/.devcontainer" "$WORK/dc"
 cp -r "$REPO" "$WORK/repo-src"

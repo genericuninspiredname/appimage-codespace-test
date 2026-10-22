@@ -45,15 +45,6 @@ done
 # never see the host's X display, even on a live desktop (see run_setup)
 printf '#!/bin/sh\nexit 1\n' > "$WORK/stub/xdpyinfo"
 chmod +x "$WORK/stub/xdpyinfo"
-cat > "$WORK/stub/id" <<'EOF'
-#!/bin/sh
-case " $* " in
-  *" roblox"*|*"roblox "*) echo 4242; exit 0;;
-  *" steam"*|*"steam "*)  echo 4243; exit 0;;
-esac
-exec /usr/bin/id "$@"
-EOF
-chmod +x "$WORK/stub/id"
 
 # --- fixture: a copy of .devcontainer + repo ----------------------------------
 cp -r "$REPO/.devcontainer" "$WORK/dc"
@@ -64,7 +55,7 @@ REPO_SRC="$WORK/repo-src"
 # --- fixture: a home that looks "used" -----------------------------------------
 H="$WORK/home"
 mkdir -p "$H/.fluxbox" "$H/Files/docs" "$H/.mozilla/firefox/abc123.default-release" \
-         "$H/.var/app/org.vinegarhq.Sober" "$H/.cache"
+         "$H/.cache"
 echo "hello" > "$H/Files/docs/note.txt"
 cat > "$H/.fluxbox/menu" <<'EOF'
 [begin] (Fluxbox)
