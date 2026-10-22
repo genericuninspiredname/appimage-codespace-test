@@ -57,8 +57,8 @@ AppImage. The core figure is consistent across a fresh creation
 (2,269,120 KB) and two rebuilds (2,269,104 / 2,269,112 KB); the
 all-optional figure is from the image-build path (a rebuild with the
 arg set — see below). A supplementary live run of `install-apps.sh`
-inside the core container gave 5,987,124 KB (slightly higher; apt
-caches from the live run).
+inside the core container gave 5,987,124 KB (slightly higher; the cause
+was not investigated).
 
 Build time (observed, same 2-core machine): the codespace was created
 and the core-only image built and started in ~4–5 min (02:17–02:21
@@ -70,8 +70,9 @@ was measured.
 
 ## How it was tested (all inside the Codespace, on this branch)
 
-- Codespace created from the branch: cold build of the core-only image
-  succeeded; desktop started (TigerVNC 24-bit 1280x800, fluxbox,
+- Codespace created from the branch: initial build (cache state of the
+  base layers unknown) of the core-only image succeeded; desktop
+  started (TigerVNC 24-bit 1280x800, fluxbox,
   websockify/noVNC on port 6080 → HTTP 200); first-start marker written.
 - Core verified present and working: Firefox AppImage launched a real
   window on `:1` (verified as an X client), `htop`, `age` (encrypt/
@@ -98,9 +99,11 @@ was measured.
   Restoring the arg to `""` and rebuilding again (~21 s, cached core
   image) returned the codespace to the exact core-only state above.
 - Supplementary: `OPTIONAL_APPS="roblox steam prism" bash install-apps.sh`
-  run live in the core container also exited 0 and deployed everything;
-  a following `setup.sh normal-start` applied the overlay (1165 libs)
-  with the desktop staying up.
+  run live in the core container also deployed everything (its final
+  success line printed; the pipeline's exit status was not captured —
+  the rebuild test above is the authoritative evidence); a following
+  `setup.sh normal-start` applied the overlay (1165 libs) with the
+  desktop staying up.
 - Validation: `OPTIONAL_APPS="bogus roblox"` fails with
   `ERROR: unknown OPTIONAL_APPS token 'bogus' (valid: roblox steam prism)`.
 - Repeat runs: `setup.sh normal-start` twice + a no-arg manual run — all
@@ -128,6 +131,9 @@ was measured.
 - `.devcontainer/devcontainer.json`: expose the `OPTIONAL_APPS` build arg.
 - `README.md`: new "Core vs optional applications (image size)" section.
 - `CHANGES-perf.md` (this file).
+
+The runtime tests above were run against implementation commit `3bdc720`;
+the commits after it are documentation-only.
 
 ## Limitations
 

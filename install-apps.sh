@@ -81,8 +81,9 @@ fi
 # 2.4x + friends) over /usr/lib/x86_64-linux-gnu via symlinks. glibc is
 # backward compatible, so every Ubuntu binary keeps working; Sober's
 # launcher, which is built against the runtime, now runs directly with
-# no sandbox. python3 is needed only by the overlay script, so it is
-# installed with this option (not in core).
+# no sandbox. This option also installs python3 for the overlay script;
+# the desktop's own dependencies may install and use python
+# independently of this option.
 # ---------------------------------------------------------------------
 if has_opt roblox; then
   apt-get install -y -qq --no-install-recommends flatpak python3
