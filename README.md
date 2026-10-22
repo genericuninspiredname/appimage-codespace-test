@@ -255,6 +255,37 @@ core profile modern versions need); actual gameplay performance on the
 (`~/.local/share/PrismLauncher` — instances, accounts, settings) is linked
 into the persistent desktop-data area and survives rebuilds.
 
+## Core vs optional applications (image size)
+
+The image build installs only the **core** applications by default:
+Firefox, the system software-OpenGL (llvmpipe) stack used for WebGL
+rendering, `htop` (Task Manager), and `age` (encrypted-profile backups).
+The desktop itself (Fluxbox, VNC, noVNC, file manager, editor, terminal)
+comes from the `desktop-lite` feature.
+
+Everything else is **optional** and no longer installed by default —
+Roblox/Sober, Steam, and PrismLauncher/Minecraft are games most users of
+this browser desktop don't need, and together with their dependencies
+(the Sober flatpak's GNOME runtime, the Steam i386 multilib stack, the
+system Java fallback) they made up the bulk of the image:
+
+| App | token | What the token installs |
+|-----|-------|--------------------------|
+| Roblox (Sober) | `roblox` | Sober flatpak + GNOME runtime, library-overlay script (also `flatpak`, `python3`) |
+| Steam | `steam` | official `steam.deb` + i386 multilib GL stack |
+| Minecraft | `prism` | PrismLauncher AppImage + `openjdk-21-jre` fallback |
+
+**To opt in:** edit `.devcontainer/devcontainer.json`, set the
+`OPTIONAL_APPS` build arg to a space-separated list of tokens (e.g.
+`"roblox steam prism"`), then rebuild the container (Codespaces menu →
+**Rebuild container**). Restarting is not enough — the list is applied at
+image-build time. Unknown tokens fail the build with a clear error.
+
+The desktop UI is unchanged either way: menu entries and launchers for
+optional apps always exist, and print a "not installed" hint when the
+app files are absent. Measured size/build-time impact is recorded in
+`CHANGES-perf.md`.
+
 ## Making it faster
 
 - **Use a 4-core machine** (`-m standardLinux32gb` when creating, or change

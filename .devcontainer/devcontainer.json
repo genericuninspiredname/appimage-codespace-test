@@ -2,7 +2,10 @@
   "name": "Browser Desktop (noVNC)",
   "build": {
     "dockerfile": "../Dockerfile",
-    "context": ".."
+    "context": "..",
+    "args": {
+      "OPTIONAL_APPS": ""
+    }
   },
   "features": {
     "ghcr.io/devcontainers/features/desktop-lite:1": {
