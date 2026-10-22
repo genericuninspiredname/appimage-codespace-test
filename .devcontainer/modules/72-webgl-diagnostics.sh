@@ -474,7 +474,13 @@ main() {
   case "$WEBGL_STATUS" in
     unavailable) note "WebGL: unavailable - see hints above" ;;
     available)   note "WebGL: available ($RENDER_TYPE rendering, $PROBE_MODE probe)" ;;
-    *)           note "WebGL: not verified - see hints above" ;;
+    *)
+      if [ "${1:-}" = "--no-probe" ]; then
+        note "WebGL: skipped (--no-probe)"
+      else
+        note "WebGL: not verified - see hints above"
+      fi
+      ;;
   esac
 
   [ "$FAILED" -gt 0 ] && exit 1
