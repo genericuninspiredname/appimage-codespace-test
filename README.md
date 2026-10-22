@@ -44,7 +44,8 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
   **Ctrl+Alt+Delete**) opens `htop` in a terminal — CPU, memory, and
   processes, with F9 to kill a stuck app.
 - **Resolution:** right-click → System → Set Resolution (the default is
-  1280x800). Fewer pixels = snappier.
+  1024x640 — lowered to keep the software-rendered desktop snappy and cheap;
+  bump it back up there if you want more room). Fewer pixels = snappier.
 - **After a rebuild:** the desktop may have started before setup applied
   desktop tweaks — right-click → **Apply Desktop Updates** (or stop and start
   the codespace) to refresh the taskbar, wallpaper, and shortcuts without
@@ -131,7 +132,7 @@ they persist across rebuilds but not across codespace deletion.
   Firefox AppImage — no GPU involved). Check with
   [get.webgl.org](https://get.webgl.org/): you should see the spinning cube.
   Note: the desktop runs at **24-bit color** (`VNC_RESOLUTION` in
-  devcontainer.json is `1280x800x24`). Without the `x24` suffix the
+  devcontainer.json is `1024x640x24`). Without the `x24` suffix the
   desktop-lite feature silently starts the VNC display at 16-bit color,
   which leaves Firefox with no usable GL visuals — games like PokéRogue
   then abort with "Cannot create WebGL context". The setup also
@@ -272,7 +273,67 @@ lean — Fluxbox ~12 MB, the VNC server ~36 MB, noVNC's websockify ~33 MB
 20 KB PNG and the taskbar theme adds no measurable memory. Firefox under
 software WebGL is the big one (several hundred MB with a few tabs open,
 more with games like PokéRogue running) — the Task Manager (Ctrl+Alt+Delete)
-shows you where the memory actually goes.
+or **System Stats** (`desktop-stats` in a terminal) shows you where the
+memory actually goes.
+
+## Startup speed and credit controls
+
+Startup is split so that a plain stop→start is cheap, while expensive work
+runs only when it can actually change something:
+
+- **Once per codespace** (`postCreateCommand` → first-start): the
+  first-start hooks, gated on the `.first-start-complete` marker.
+- **Once per container lifetime** (startup stamps in
+  `/var/lib/desktop-startup-stamps/`, wiped automatically by a rebuild):
+  the Sober library overlay, the `/app` hardlink tree, the runtime-share
+  copies, and the recursive `chown` over the Sober/Steam data dirs. A
+  stop→start skips all of it; a rebuild re-runs it because a rebuild
+  recreates that state from the image.
+- **Every start** (`postStartCommand` → normal-start): only cheap,
+  idempotent work — symlinks, launchers, menu/config managed blocks,
+  restoring the desktop settings.
+
+The stamp records a hash of its inputs (the module, the overlay script,
+the flatpak commit ids), so editing any of them re-runs that work exactly
+once more. To force everything to re-run on the next start:
+`rm -rf /var/lib/desktop-startup-stamps` (or just rebuild).
+
+`setup.sh` prints a per-module timing line on every run, so you can see
+what a start actually costs.
+
+**Idle check:** the menu's **Idle Check** (or `desktop-idle` in a terminal)
+shows how long your terminal sessions have been idle, which desktop apps
+are running, and the stop/delete commands — a read-only reminder, it never
+stops anything itself.
+
+**Diagnostics:** **System Stats** (or `desktop-stats`) prints a one-shot
+CPU/memory snapshot: load, memory, swap, and the top processes by memory.
+
+## Stop or delete the codespace
+
+Codespaces bills **compute while running** and **disk storage while the
+codespace exists** (even stopped). The idle timeout (Settings →
+[Codespaces settings](https://github.com/settings/codespaces) → *Idle
+timeout*, default 30 minutes) stops the machine automatically when you
+walk away — set it lower to save credits.
+
+**Stop** (ends compute billing, keeps the disk and storage billing):
+
+- Web UI: [github.com/codespaces](https://github.com/codespaces) → the `···`
+  menu on your codespace → **Stop codespace**; or from the editor's
+  bottom-left menu → **Stop codespace**.
+- CLI: `gh codespace stop -c <name>` (see `gh codespace list` for names).
+
+**Delete** (ends compute AND storage billing; the disk, including
+`/workspaces`, is gone — run **Back Up Files** first if you want your
+documents):
+
+- Web UI: [github.com/codespaces](https://github.com/codespaces) → the `···`
+  menu → **Delete**.
+- CLI: `gh codespace delete -c <name>`.
+
+Deleting a codespace does not touch the repo — you can always create a new
+one (and **Back Up Files** restores your documents).
 
 ## Add more apps
 
@@ -293,7 +354,9 @@ setup marks it disabled. Other AppImages may need
 ## Billing notes
 
 - Billed for compute while **running**; disk storage counts while it exists
-  (even stopped). Stop when done for the day; delete when done for good.
+  (even stopped). Stop when done for the day; delete when done for good —
+  see [Stop or delete the codespace](#stop-or-delete-the-codespace) for
+  the exact steps.
 - Deleting a codespace does not touch the repo — you can always create a new one
   (and **Back Up Files** restores your documents).
 
@@ -305,6 +368,7 @@ lexical order:
 
 | Module | Responsibility |
 |--------|----------------|
+| `05-startup-gates.sh` | Startup stamps: skip expensive work that already ran this container lifetime |
 | `10-persistence.sh` | Persistent data dir, home symlinks, `desktop-backup` |
 | `20-browser.sh` | Browser launcher, WebGL prefs, namespaces-check flag |
 | `30-roblox.sh` | Optional Roblox/Sober setup (image-dependent steps guarded; user, links and launchers always installed) |
@@ -312,6 +376,7 @@ lexical order:
 | `50-menu.sh` | Fluxbox desktop menu entries |
 | `60-fluxbox.sh` | Wallpaper, init, style overlay, keys, shortcuts |
 | `70-diagnostics.sh` | git safe.directory fix, reapply to a running desktop |
+| `80-perf-tools.sh` | `desktop-stats` (CPU/memory) and `desktop-idle` (inactivity check) |
 
 After the modules it runs **lifecycle hooks** (see
 `.devcontainer/hooks/README.md`):

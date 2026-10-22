@@ -19,6 +19,8 @@ REMOTE_URL="${DESKTOP_REMOTE_URL:-$(git -C "$REPO_DIR" remote get-url origin 2>/
 
 DEVCONTAINER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 export HOMEDIR DATA_DIR BIN_DIR REPO_DIR REMOTE_URL
+_setup_t0=$(date +%s%N)
+_mod_times=""
 
 # ---------------------------------------------------------------------------
 # Lifecycle mode. Codespaces calls this script with an explicit mode:
@@ -43,8 +45,15 @@ esac
 # ---------------------------------------------------------------------------
 for module in "$DEVCONTAINER_DIR"/modules/[0-9]*.sh; do
   # shellcheck source=/dev/null
+  _t0=$(date +%s%N)
   . "$module"
+  _t1=$(date +%s%N)
+  _mod_times+="$(basename "$module")=$(( (_t1 - _t0) / 1000000 ))ms "
 done
+# Startup timing (perf/codespace-cost-controls): makes it visible which
+# modules dominate a start, so regressions are caught early. Cheap (two
+# date calls per module) and runs in both modes.
+echo "Setup timing: mode=$MODE modules=$(( ($(date +%s%N) - _setup_t0) / 1000000 ))ms (${_mod_times:-none}; hooks excluded)"
 
 # ---------------------------------------------------------------------------
 # Lifecycle hooks. Stable extension points for feature branches:

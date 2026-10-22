@@ -107,6 +107,7 @@ run_setup() { # run_setup <fixture-root> <mode>  ("" mode = no argument)
     export DESKTOP_XWWW="'"$fx"'/xwww-dir/x-www-browser"
     export DESKTOP_REPO_DIR="'"$REPO_SRC"'"
     export DESKTOP_REMOTE_URL="file://'"$WORK"'/origin.git"
+    export DESKTOP_STAMP_DIR="'"$fx"'/stamps"
     bash "'"$WORK"'/dc/setup.sh" '"${mode:+$mode}"'
   '
   if [ "$ISOLATED" = 1 ]; then
@@ -195,6 +196,31 @@ grep -q 'webgl.force-enabled", true' "$H/.mozilla/firefox/abc123.default-release
 grep -q 'user.set' "$H/.mozilla/firefox/abc123.default-release/user.js" || fail "user-authored prefs lost"
 [ -f "$H/.cache/.disable-namespaces-check" ] || fail "namespaces-check flag missing"
 [ -f "$WORK/data/.gitignore" ] || fail "data-dir gitignore missing"
+# --- perf/codespace-cost-controls assertions -------------------------------
+[ -x "$WORK/bin/desktop-stats" ] || fail "desktop-stats not installed"
+[ -x "$WORK/bin/desktop-idle" ] || fail "desktop-idle not installed"
+grep -q '\[exec\] (System Stats) {tilix -e desktop-stats}' "$MENU" || fail "System Stats menu entry missing"
+grep -q '\[exec\] (Idle Check) {tilix -e desktop-idle}' "$MENU" || fail "Idle Check menu entry missing"
+[ "$(grep -c 'tilix -e desktop-stats' "$MENU")" = 1 ] || fail "System Stats menu entry duplicated"
+[ "$(grep -c 'tilix -e desktop-idle' "$MENU")" = 1 ] || fail "Idle Check menu entry duplicated"
+# startup stamps: written per container lifetime, stable across runs
+[ -d "$WORK/stamps" ] || fail "stamp dir not created"
+# gate helpers: missing stamp runs, unchanged input skips, changed input re-runs
+( export DESKTOP_STAMP_DIR="$WORK/stamps-unit"
+  bash -c '
+    set -e
+    . "'"$REPO"'/.devcontainer/modules/05-startup-gates.sh"
+    if stamp_changed demo input-a; then :; else echo "FAIL: missing stamp must run" >&2; exit 1; fi
+    stamp_done demo input-a
+    if stamp_changed demo input-a; then echo "FAIL: unchanged input must skip" >&2; exit 1; fi
+    if stamp_changed demo input-b; then :; else echo "FAIL: changed input must run" >&2; exit 1; fi
+  '
+) || fail "startup-gate helper semantics broken"
+# coordinator prints the startup timing line, and state stays identical
+OUT2=$(run_setup "$WORK" normal-start 2>&1) || fail "timing-check run exited non-zero"
+echo "$OUT2" | grep -q "Setup timing: mode=" || fail "setup timing line missing"
+snapshot > "$WORK/snap5"
+diff "$WORK/snap1" "$WORK/snap5" > /dev/null || fail "state changed on timing-check run"
 [ -d "$WORK/data/.git" ] || fail "data dir not a git repo"
 git -C "$WORK/data" remote get-url origin | grep -q origin.git || fail "data dir remote wrong"
 [ -f "$WORK/data/private/fluxbox/backgrounds/wallpaper.png" ] || fail "wallpaper not copied"

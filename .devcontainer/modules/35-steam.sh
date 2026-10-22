@@ -21,7 +21,13 @@ chown "$STEAM_USER" /run/user/"$STEAM_UID" && chmod 700 /run/user/"$STEAM_UID"
 mkdir -p "$DATA_DIR/private/steam-home"
 link_dir "/home/$STEAM_USER/.steam"              "$DATA_DIR/private/steam-home/steam"
 link_dir "/home/$STEAM_USER/.local/share/Steam"  "$DATA_DIR/private/steam-home/local-share-steam"
-chown -R "$STEAM_USER:$STEAM_USER" "$DATA_DIR/private/steam-home"
+# Recursive chown over the (possibly multi-GB) game library: run once per
+# container lifetime (startup stamp; wiped by a rebuild), not every start.
+STEAM_CHOWN_INPUT="$(mod_hash) uid=$STEAM_UID"
+if stamp_changed steam-chown "$STEAM_CHOWN_INPUT"; then
+  chown -R "$STEAM_USER:$STEAM_USER" "$DATA_DIR/private/steam-home"
+  stamp_done steam-chown "$STEAM_CHOWN_INPUT"
+fi
 
 cat > "$BIN_DIR/steam" <<'ST'
 #!/bin/bash
