@@ -258,6 +258,12 @@ EOF
 }
 
 # ------------------------------------------------------------ dialog tooling
+# GTK apps in this desktop need the session bus; the fluxbox session
+# exports DBUS_SESSION_BUS_ADDRESS=autolaunch:, but this script may be
+# launched by a start hook that lacks it. Default to autolaunch (X11
+# based), never override an existing value.
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-autolaunch:}"
+
 pick_tool() {
   if command -v zenity >/dev/null 2>&1; then TOOL=zenity
   elif command -v xmessage >/dev/null 2>&1; then TOOL=xmessage
@@ -268,6 +274,22 @@ pick_tool() {
 # launch_bg <cmd...>: run detached so the dialog stays responsive and
 # the child survives this script's exit.
 launch_bg() { nohup "$@" >/dev/null 2>&1 & }
+
+# term_run <title> <command...>: open a terminal window running <command>.
+# Prefers tilix (the desktop's standard terminal, same as the menu); tilix
+# is known to exit immediately in some root setups, so its liveness is
+# checked and xterm (always present) is the fallback.
+term_run() {
+  local title="$1"; shift
+  if command -v tilix >/dev/null 2>&1; then
+    nohup tilix -t "$title" -e "$@" >/dev/null 2>&1 &
+    local tpid=$!
+    sleep 1
+    kill -0 "$tpid" 2>/dev/null && return 0
+  fi
+  command -v xterm >/dev/null 2>&1 || return 0
+  nohup xterm -T "$title" -e "$@" >/dev/null 2>&1 &
+}
 
 # main_dialog: prints an action token (browser|files|webgl|perf|stop|close).
 # Returns 2 when the dialog could not be displayed (caller must NOT mark
@@ -338,21 +360,33 @@ text_window() {
 do_action() {
   case "$1" in
     browser) launch_bg x-www-browser ;;
-    files)   launch_bg nautilus "$HOME/Files" ;;
+    files)   files_action ;;
     webgl)   webgl_test ;;
     perf)    perf_settings ;;
     stop)    stop_instructions ;;
   esac
 }
 
+files_action() {
+  # nautilus refuses to work when running as root (its own banner says it
+  # "cannot work correctly if run as root" and it never maps a window), so
+  # as root fall back to a terminal listing of the same folder.
+  if [ "$(id -u)" != "0" ] && command -v nautilus >/dev/null 2>&1; then
+    launch_bg nautilus "$HOME/Files"
+    return 0
+  fi
+  term_run "Files" bash -c \
+    'cd "$HOME/Files" 2>/dev/null || cd "$HOME"; echo "~/Files:"; ls -laF; echo; printf "The graphical file manager cannot run as root here - this is a directory listing.\nPress Enter to close "; read -r _'
+}
+
 webgl_test() {
   if command -v desktop-doctor >/dev/null 2>&1; then
     # the diagnostics interface from the diagnostics branch
-    launch_bg tilix -t "WebGL Test" -e desktop-doctor
+    term_run "WebGL Test" desktop-doctor
     return 0
   fi
   # fallback: honest message + GLX evidence in a terminal that stays open
-  launch_bg tilix -t "WebGL Test" -e "$0" --webgl-quick
+  term_run "WebGL Test" "$0" --webgl-quick
 }
 
 webgl_quick_mode() {
@@ -394,7 +428,7 @@ perf_settings() {
   if text_window "Performance Settings" "Open Resolution Settings" "$tmp" \
      && [ -x /usr/local/bin/set-resolution ]; then
     # the desktop's actual resolution selector (same command as the menu)
-    launch_bg tilix -t "Set Resolution" -e bash /usr/local/bin/set-resolution
+    term_run "Set Resolution" bash /usr/local/bin/set-resolution
   fi
   rm -f "$tmp"
 }
