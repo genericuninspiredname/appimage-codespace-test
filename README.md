@@ -5,6 +5,20 @@ your GitHub Codespace (Fluxbox desktop + TigerVNC + noVNC on port 6080) with
 Firefox as the browser — much lighter than Chromium on CPU and memory, and it
 renders cleanly on a software-rendered 2-core machine.
 
+**Contents:** [Start it](#start-it) · [Use the desktop](#use-the-desktop) ·
+[First-run welcome screen](#first-run-welcome-screen) ·
+[Linux and Windows environments](#linux-and-windows-environments) ·
+[Files and persistence](#files-and-persistence) ·
+[Encrypted profiles](#encrypted-profiles-password-protected-saves) ·
+[What to expect](#what-to-expect) · [Roblox](#roblox) · [Steam](#steam) ·
+[Minecraft](#minecraft-prismlauncher) ·
+[Core vs optional applications](#core-vs-optional-applications-image-size) ·
+[Making it faster](#making-it-faster) ·
+[Startup speed and credit controls](#startup-speed-and-credit-controls) ·
+[Stop or delete the codespace](#stop-or-delete-the-codespace) ·
+[Diagnostics](#diagnostics) · [Add more apps](#add-more-apps) ·
+[Repository layout](#repository-layout-setup-architecture)
+
 ## Start it
 
 1. Open [the repo](https://github.com/genericuninspiredname/appimage-codespace-test) on GitHub.
@@ -57,9 +71,15 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
 
 ## First-run welcome screen
 
-The first time the desktop starts, a small **welcome screen** opens on it
-(only on that first launch; it never re-appears on its own after that —
-reopen it any time via the menu: **right-click → Welcome Screen**).
+A small **welcome screen** gives a first-run overview of the desktop and
+its health. Its **automatic** first-launch display could not be
+reliably confirmed in this environment — on some Codespace starts
+nothing appeared, and the cause was not established (manual opening
+works reliably; see below). Open it via the menu — **right-click →
+Welcome Screen** — or run `desktop-welcome` in a terminal. Closing it
+then marks onboarding as done, and a launch that fails or is killed
+deliberately leaves the marker absent so it is retried on the next
+start.
 
 It shows what this environment is and how healthy it is:
 
@@ -68,10 +88,9 @@ It shows what this environment is and how healthy it is:
 - **CPU** (cores, model, load; host view and the container limit),
   **memory** (host usage and the container limit), **screen resolution**.
 - **WebGL status:** the welcome keeps no test state (and says so); the
-  **WebGL Test** button runs `desktop-doctor` (the diagnostics tool) when
-  it is installed on this branch; otherwise it falls back to a clearly
-  labeled GLX renderer check. A GLX software renderer (llvmpipe) is normal
-  here — there is no GPU.
+  **WebGL Test** button runs `desktop-doctor`, the diagnostics tool (see
+  [Diagnostics](#diagnostics)). A GLX software renderer (llvmpipe) is
+  normal here — there is no GPU.
 - **Backup status:** whether (and when) `~/Files` was last backed up, and
   whether the latest backup reached GitHub.
 
@@ -86,6 +105,33 @@ marker lives in the persistent data dir but is never committed by
 `desktop-backup`, so a **rebuild** does not re-show it, while a **new
 codespace restored from a backup** shows it again.
 
+## Linux and Windows environments
+
+**This desktop is always Linux.** Codespaces run Linux containers only —
+GitHub documents that Windows and macOS are
+[not supported](https://docs.github.com/en/codespaces/overview) as the
+codespace OS — so everything in this README happens on Linux, with no GPU
+and the container limits described in [What to expect](#what-to-expect).
+
+The welcome screen's **Environment** line reflects that: it reads
+`Linux (GitHub Codespace)` in a codespace, from Codespaces-provided
+evidence (never a guess). The same detection code can also recognize a
+Windows host running this repo's setup under WSL (`Windows host (WSL)`,
+from kernel markers) — that path is covered by the repo's unit tests but
+was **not verified end-to-end** (no Windows host was available during
+testing), so treat it as best-effort. With no evidence at all it says
+`Unknown host`.
+
+**Windows appears in two other places, both documentation-only:**
+
+- The [`windows/` directory](windows/) describes a **separate physical
+  Windows machine** for actually playing Roblox (see
+  [Roblox](#roblox)). Nothing in it was verified on Windows, and none of
+  it changes what the codespace does.
+- The backup and profile tools (`desktop-backup`, `desktop-profile`) only
+ever see this codespace's Linux filesystem — they never touch a Windows
+host, and must not be pointed at one.
+
 ## Files and persistence
 
 **Where to save things:** the **Files** menu entry (or `~/Files` in a terminal)
@@ -99,8 +145,9 @@ stored in the same persistent location), so a rebuild doesn't reset them.
 
 **Backups (survive codespace deletion):** deleting the codespace deletes its
 disk, including `/workspaces`. To keep your documents, click **Back Up Files**
-in the menu — it commits `~/Files` to the private `desktop-data` branch of this
-repo and pushes it to GitHub. A fresh codespace restores those files
+in the menu — it commits `~/Files` to the `desktop-data` branch of this
+repo (access follows the repository's own permissions) and pushes it to
+GitHub. A fresh codespace restores those files
 automatically on creation. Backups include only your documents in `~/Files` —
 browser profiles and credentials are deliberately never pushed. If the push
 fails, your documents stay committed locally and the tool says how many
@@ -272,7 +319,7 @@ real Windows machine, not the Codespace. The [`windows/` directory](windows/)
 has a documentation-only profile for that — supported Windows host
 requirements, setup, remote-access options, performance tuning, and rules
 for keeping Roblox data separate from this Codespace (it adds no code and
-changes no Codespace behavior; nothing Windows was verified by that branch).
+changes no Codespace behavior; nothing Windows was verified).
 
 Technical note: Sober is a Flatpak, but Codespaces blocks the kernel
 namespaces its sandbox needs — so the image installs the flatpak, overlays
@@ -473,15 +520,6 @@ If a pkgforge AppImage shows a "user namespaces" message, it's already handled �
 setup marks it disabled. Other AppImages may need
 `touch ~/.cache/.disable-namespaces-check` too.
 
-## Billing notes
-
-- Billed for compute while **running**; disk storage counts while it exists
-  (even stopped). Stop when done for the day; delete when done for good —
-  see [Stop or delete the codespace](#stop-or-delete-the-codespace) for
-  the exact steps.
-- Deleting a codespace does not touch the repo — you can always create a new one
-  (and **Back Up Files** restores your documents).
-
 ## Repository layout (setup architecture)
 
 `.devcontainer/setup.sh` is only a **coordinator**: it sets up the shared
@@ -494,11 +532,14 @@ lexical order:
 | `10-persistence.sh` | Persistent data dir, home symlinks, `desktop-backup` |
 | `20-browser.sh` | Browser launcher, WebGL prefs, namespaces-check flag |
 | `30-roblox.sh` | Optional Roblox/Sober setup (image-dependent steps guarded; user, links and launchers always installed) |
+| `35-steam.sh` | Optional Steam setup (same pattern: guarded image steps, always-installed user/links/launcher) |
 | `40-profiles.sh` | Encrypted save profiles (`desktop-profile`) |
 | `50-menu.sh` | Fluxbox desktop menu entries |
 | `60-fluxbox.sh` | Wallpaper, init, style overlay, keys, shortcuts |
+| `65-taskbar-window-switching.sh` | Taskbar config + window-switch keys/managed blocks |
 | `70-diagnostics.sh` | git safe.directory fix, reapply to a running desktop |
 | `72-webgl-diagnostics.sh` | `desktop-doctor` tool: WebGL/rendering/display/CPU/memory diagnostics + menu entry |
+| `75-oobe.sh` | First-run welcome screen (`desktop-welcome`) + its menu entry |
 | `80-perf-tools.sh` | `desktop-stats` (CPU/memory) and `desktop-idle` (inactivity check) |
 
 After the modules it runs **lifecycle hooks** (see

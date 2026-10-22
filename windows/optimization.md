@@ -1,7 +1,7 @@
 # Windows performance recommendations for Roblox
 
 Tuning steps for a Windows host running Roblox. Documentation only —
-individual settings were not benchmarked on Windows by this branch; each
+individual settings were not benchmarked on Windows for this repo; each
 recommendation cites where it comes from. See [setup.md](setup.md) first.
 
 ## Windows-level tuning
@@ -9,7 +9,7 @@ recommendation cites where it comes from. See [setup.md](setup.md) first.
 - **Power plan:** compare the available power modes (Settings → System →
   Power) while plugged in and use whichever gives the best measured result;
   laptops in particular may throttle the GPU on battery. No specific plan
-  was measured by this branch.
+  was measured for this repo.
 - **GPU driver:** keep the AMD/NVIDIA/Intel driver current from the
   vendor's own site (not just Windows Update). Roblox relies on your GPU's
   driver for DirectX rendering.
@@ -55,7 +55,7 @@ recommendation cites where it comes from. See [setup.md](setup.md) first.
 - **"Optimization" scripts from YouTube/reddit that edit the registry or
   kill services wholesale:** avoid unreviewed registry or service
   modifications — unvetted changes can break Windows updates, and none
-  were reviewed by this branch.
+  were reviewed for this repo.
 
 ## Frame rate
 
@@ -67,7 +67,7 @@ values Default/60/120/144/240 per Roblox's
 [announcement](https://devforum.roblox.com/t/introducing-the-maximum-framerate-setting/2995965).
 Try a lower Maximum Frame Rate setting and compare utilization,
 temperature, noise, and smoothness — no performance or thermal improvement
-was measured by this branch.
+was measured for this repo.
 
 ## Measuring
 

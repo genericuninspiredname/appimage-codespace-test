@@ -2,7 +2,7 @@
 
 Ways to reach your Windows Roblox host when you are not sitting at it, and
 how to do so without exposing it to the internet. Documentation only —
-nothing here was verified on Windows by this branch; each method cites its
+nothing here was verified on Windows for this repo; each method cites its
 vendor's documentation.
 
 ## Security rule first

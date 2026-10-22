@@ -1,7 +1,7 @@
 # Windows host setup for Roblox
 
 Steps and requirements for preparing a Windows machine to play Roblox.
-Documentation only — nothing here was verified on Windows by this branch.
+Documentation only — nothing here was verified on Windows for this repo.
 
 ## Supported Windows host requirements
 
