@@ -222,13 +222,15 @@ section). No workaround was found or verified in this repo.
 - **Launch it:** right-click the desktop → **Steam** (or run `steam` in a
   terminal). Inside a Codespace you will see the namespace error dialog.
   In the container sandbox where the steam branch was developed (user
-  namespaces allowed), the client and sign-in window did render; the same
-  is expected anywhere user namespaces are allowed, but that was not
-  re-verified here.
-- **What is verified everywhere:** the install (i386 stack + `steam.deb`),
+  namespaces allowed), the client and sign-in window did render; that
+  result was not re-verified here.
+- **Verified in this Codespace:** the install (i386 stack + `steam.deb`),
 the dedicated non-root `steam` user, the launcher wrapper and the persistent
 home (`~/.steam` for the `steam` user, including the game library, linked
-into the desktop-data area so installs and logins survive rebuilds).
+into the desktop-data area so installs and logins survive rebuilds). The
+client runtime itself was not verified here (it failed at the namespace
+check; its interactive dependency prompt was dismissed manually during
+testing).
 
 ## Minecraft (PrismLauncher)
 

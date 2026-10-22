@@ -73,8 +73,10 @@ install_appimage_sqfs() {
   echo "installed: $name"
 }
 
-# Pin the PrismLauncher version: grab the latest release tag from the API
-# when available so updates are deliberate (bump this on upgrades).
+# Resolve the PrismLauncher version at image-build time: fetch the latest
+# release tag from the GitHub API when available, falling back to 11.1.1.
+# NOTE: this is NOT a pin - a rebuild can pick up a newer release without
+# a change to this file. To truly pin a version, hardcode it below.
 PRISM_VER=$(curl -fsSL --retry 3 \
   https://api.github.com/repos/PrismLauncher/PrismLauncher/releases/latest \
   | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)
