@@ -75,12 +75,44 @@ X display, shows the screen once, and exits — nothing keeps running.
   backup_status variants (no repo / empty repo / backed up / dirty /
   unpushed / markers not documents); `--auto` gating, dialog-failure
   retry (marker absent), no-display failure, stale-lock stealing,
-  manual reopen; `classify_renderer` evidence rules.
+  manual reopen; extra-button dispatch for all six buttons in BOTH
+  zenity styles — zenity 4 (label on stdout, exit 1) and zenity 3
+  (label on stderr, exit 5) — plus zenity-3 timeout (exit 5, no
+  label) NOT treated as Close; `classify_renderer` evidence rules.
+  The zenity-4 case is a regression test: the first implementation
+  read the label from stderr only, so on the image's zenity 4.0.1
+  every extra button silently closed the dialog (caught live in the
+  Codespace, then reproduced hermetically).
 - `tests/idempotence-test.sh` still passes (4 runs, state identical).
-- Live Codespace test on this branch: first launch shows the screen,
-  marker written, second start silent, manual reopen works, all five
-  buttons exercised, repeat-start and rebuild behavior checked — see
-  the final commit message and CHANGES updates below.
+- Live Codespace test (branch checkout at the final commit, desktop
+  via noVNC, buttons clicked with xdotool, verified via screenshots
+  and the script's own xtrace):
+  - first launch (`setup.sh normal-start` with no marker): dialog
+    auto-appears, shows Codespace environment, CPU, memory,
+    resolution, honest WebGL line and backup status.
+  - every button clicked and verified: Browser -> Firefox launched;
+    Files -> nautilus opened ~/Files; WebGL Test -> terminal with the
+    honest GLX fallback text (and, with desktop-doctor from the
+    diagnostics branch installed as a test, the terminal runs
+    desktop-doctor instead — the "diagnostics interface when
+    available" path); Performance Settings -> tips window, whose
+    "Open Resolution Settings" opens the real set-resolution
+    selector; Stop Instructions -> the stop/billing instructions
+    window; Close -> marker written, welcome exits.
+  - marker gating: second start and repeated `normal-start` runs
+    with the marker present show nothing (hook logs "welcome
+    already shown - skipping").
+  - manual reopen: Fluxbox menu -> Welcome Screen relaunches the
+    dialog (clicked live); `desktop-welcome --print` works.
+  - rebuild: the marker lives in /workspaces (persistent volume),
+    so a rebuild keeps onboarding done; it is NOT in files/, so it
+    is never committed by desktop-backup — a NEW codespace restored
+    from a backup shows the welcome again (by design).
+- Two real bugs were found and fixed during live testing: zenity 4
+  prints extra-button labels to stdout with exit 1 (zenity 3 printed
+  them to stderr with exit 5), and the label+warnings string does not
+  end with the label (GTK/GVFS warnings follow it on stderr). Both
+  are covered by the hermetic regression tests now.
 
 ## Limitations
 - "Windows host" is detected from WSL kernel markers; an ordinary Linux
@@ -88,3 +120,12 @@ X display, shows the screen once, and exits — nothing keeps running.
   for end-to-end testing (same as the windows-profile branch).
 - Backup push state reflects the last known remote ref; the welcome
   never does a network fetch.
+- Cosmetic, seen live: the xterm fallback for WebGL/Files/Resolution
+  wraps long lines at ~80 columns; the Stop Instructions window's
+  last text line is partially clipped until scrolled. Pre-existing
+  environment issues affect it too: tilix exits immediately when
+  running as root (the script falls back to xterm), and bash prints
+  a libtinfo version warning at startup.
+- The zenity fallback path (xmessage) could not be exercised live —
+  zenity is always present in this image; it is covered by the
+  hermetic test's stubs only.
