@@ -72,15 +72,14 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
 ## First-run welcome screen
 
 A small **welcome screen** gives a first-run overview of the desktop and
-its health. Its **automatic** first-launch display is not reliable in
-this environment: the Codespaces startup lifecycle can kill the launcher
-while the desktop is still coming up — on some starts nothing appears at
-all (observed and reproduced on several codespace starts; the launcher
-dies before the desktop is ready and leaves no trace). What is verified:
-open it any time via the menu — **right-click → Welcome Screen** — or
-run `desktop-welcome` in a terminal. Closing it then marks onboarding as
-done, and a launch that fails or is killed deliberately leaves the marker
-absent so it is retried on the next start.
+its health. Its **automatic** first-launch display could not be
+reliably confirmed in this environment — on some Codespace starts
+nothing appeared, and the cause was not established (manual opening
+works reliably; see below). Open it via the menu — **right-click →
+Welcome Screen** — or run `desktop-welcome` in a terminal. Closing it
+then marks onboarding as done, and a launch that fails or is killed
+deliberately leaves the marker absent so it is retried on the next
+start.
 
 It shows what this environment is and how healthy it is:
 
@@ -146,8 +145,9 @@ stored in the same persistent location), so a rebuild doesn't reset them.
 
 **Backups (survive codespace deletion):** deleting the codespace deletes its
 disk, including `/workspaces`. To keep your documents, click **Back Up Files**
-in the menu — it commits `~/Files` to the private `desktop-data` branch of this
-repo and pushes it to GitHub. A fresh codespace restores those files
+in the menu — it commits `~/Files` to the `desktop-data` branch of this
+repo (access follows the repository's own permissions) and pushes it to
+GitHub. A fresh codespace restores those files
 automatically on creation. Backups include only your documents in `~/Files` —
 browser profiles and credentials are deliberately never pushed. If the push
 fails, your documents stay committed locally and the tool says how many
@@ -532,11 +532,14 @@ lexical order:
 | `10-persistence.sh` | Persistent data dir, home symlinks, `desktop-backup` |
 | `20-browser.sh` | Browser launcher, WebGL prefs, namespaces-check flag |
 | `30-roblox.sh` | Optional Roblox/Sober setup (image-dependent steps guarded; user, links and launchers always installed) |
+| `35-steam.sh` | Optional Steam setup (same pattern: guarded image steps, always-installed user/links/launcher) |
 | `40-profiles.sh` | Encrypted save profiles (`desktop-profile`) |
 | `50-menu.sh` | Fluxbox desktop menu entries |
 | `60-fluxbox.sh` | Wallpaper, init, style overlay, keys, shortcuts |
+| `65-taskbar-window-switching.sh` | Taskbar config + window-switch keys/managed blocks |
 | `70-diagnostics.sh` | git safe.directory fix, reapply to a running desktop |
 | `72-webgl-diagnostics.sh` | `desktop-doctor` tool: WebGL/rendering/display/CPU/memory diagnostics + menu entry |
+| `75-oobe.sh` | First-run welcome screen (`desktop-welcome`) + its menu entry |
 | `80-perf-tools.sh` | `desktop-stats` (CPU/memory) and `desktop-idle` (inactivity check) |
 
 After the modules it runs **lifecycle hooks** (see
