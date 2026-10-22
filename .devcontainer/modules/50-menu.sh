@@ -11,7 +11,7 @@ MENU="$HOMEDIR/.fluxbox/menu"
 if [ -f "$MENU" ]; then
   awk -v home="$HOMEDIR" -v fluxdir="$HOMEDIR/.fluxbox" '
     BEGIN {
-      block = "# >>> desktop-apps >>>\n[exec] (Roblox) {roblox}\n[exec] (Run Program...) {fbrun}\n[exec] (Task Manager) {tilix -e htop}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Keyboard Shortcuts) {mousepad " fluxdir "/SHORTCUTS}\n[submenu] (Encrypted Profiles) {}\n[exec] (Save Profile) {tilix -t \"Save Profile\" -e desktop-profile save}\n[exec] (Restore Profile) {tilix -t \"Restore Profile\" -e desktop-profile restore}\n[exec] (List Profiles) {tilix -t \"Profiles\" -e desktop-profile list}\n[end]\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[restart] (Apply Desktop Updates) {}\n# <<< desktop-apps <<<"
+      block = "# >>> desktop-apps >>>\n[exec] (Roblox) {roblox}\n[exec] (Steam) {steam}\n[exec] (Prism Launcher) {prismlauncher}\n[exec] (Run Program...) {fbrun}\n[exec] (Task Manager) {tilix -e htop}\n[exec] (Files) {nautilus " home "/Files}\n[exec] (Keyboard Shortcuts) {mousepad " fluxdir "/SHORTCUTS}\n[submenu] (Encrypted Profiles) {}\n[exec] (Save Profile) {tilix -t \"Save Profile\" -e desktop-profile save}\n[exec] (Restore Profile) {tilix -t \"Restore Profile\" -e desktop-profile restore}\n[exec] (List Profiles) {tilix -t \"Profiles\" -e desktop-profile list}\n[end]\n[exec] (Back Up Files) {tilix -e desktop-backup}\n[restart] (Apply Desktop Updates) {}\n# <<< desktop-apps <<<"
       inblock = 0
     }
     /^# >>> desktop-apps >>>/ { inblock = 1; next }

@@ -47,10 +47,13 @@ for cmd in useradd chown xhost; do
     > "$WORK/stub/$cmd"
   chmod +x "$WORK/stub/$cmd"
 done
-# id: answer for the roblox user, pass everything else through
+# id: answer for the roblox and steam users, pass everything else through
 cat > "$WORK/stub/id" <<'EOF'
 #!/bin/sh
-case " $* " in *" roblox"*|*"roblox "*) echo 4242; exit 0;; esac
+case " $* " in
+  *" roblox"*|*"roblox "*) echo 4242; exit 0;;
+  *" steam"*|*"steam "*)  echo 4243; exit 0;;
+esac
 exec /usr/bin/id "$@"
 EOF
 chmod +x "$WORK/stub/id"
@@ -178,6 +181,14 @@ ls "$WORK"/data/files/Imported-from-home-*/docs/note.txt >/dev/null 2>&1 \
   || fail "home Files not imported into data dir"
 [ -x "$WORK/bin/desktop-backup" ] || fail "desktop-backup not installed"
 [ -x "$WORK/bin/desktop-profile" ] || fail "desktop-profile not installed"
+[ -x "$WORK/bin/steam" ] || fail "steam launcher not installed"
+[ -x "$WORK/bin/prismlauncher" ] || fail "prismlauncher launcher not installed"
+grep -q '\[exec\] (Steam) {steam}' "$MENU" || fail "Steam menu entry missing"
+grep -q '\[exec\] (Prism Launcher) {prismlauncher}' "$MENU" || fail "Prism Launcher menu entry missing"
+[ "$(grep -c '(Steam) {steam}' "$MENU")" = 1 ] || fail "Steam menu entry duplicated"
+[ -d "$WORK/data/private/steam-home/steam" ] || fail "steam persistence dir missing"
+[ -L "$H/.local/share/PrismLauncher" ] \
+  || fail "PrismLauncher data not linked into persistent dir"
 [ -x "$WORK/xwww-dir/x-www-browser" ] || fail "browser launcher not installed"
 grep -q 'webgl.force-enabled", true' "$H/.mozilla/firefox/abc123.default-release/user.js" || fail "webgl pref missing"
 [ "$(grep -c 'webgl' "$H/.mozilla/firefox/abc123.default-release/user.js")" = 2 ] || fail "webgl prefs duplicated"

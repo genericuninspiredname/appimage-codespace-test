@@ -58,6 +58,7 @@ link_dir() { # link_dir <src> <dest> [migrate]
       if [ "$migrate" = 1 ]; then
         # Whole-directory import for user documents: the entire source tree
         # (files, symlinks, empty folders - everything) is moved as-is into
+        # the persistent destination, so no version can be lost. Only after
         # the move succeeds is the original path replaced by the symlink.
         local import_dir
         import_dir="$dest/Imported-from-home-$(date -u +%Y%m%d-%H%M%S)-$$"

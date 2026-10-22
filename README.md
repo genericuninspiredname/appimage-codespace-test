@@ -209,6 +209,52 @@ change, the file is
 `/home/roblox/.var/app/org.vinegarhq.Sober/config/sober/config.json`
 (delete it to reset to defaults).
 
+## Steam
+
+Steam is preinstalled and works in the container — the client, sign-in, and
+library UI all render on the software-rendered desktop.
+
+- **Launch it:** right-click the desktop → **Steam** (or run `steam` in a
+  terminal).
+- **First run:** the client self-updates (a minute or two, ~400 MB), then
+  shows the sign-in window with account name/password or QR sign-in via the
+  Steam Mobile app.
+- **Games:** small/2D titles run acceptably under software rendering
+  (Mesa llvmpipe); modern 3D games are technically launchable but too slow
+  to enjoy on a 2-core codespace — treat this as client/library access.
+
+Technical notes: the Steam client refuses to run as root, so it runs as a
+dedicated `steam` user (same pattern as the `roblox` user) via a wrapper in
+`/usr/local/bin/steam`. It launches with `-no-cef-sandbox` because Codespaces
+blocks the user namespaces the embedded CEF sandbox needs — without it the
+whole UI fails to render. The client is 32-bit at heart, so the image adds
+the i386 multilib stack (`libgl1-mesa-dri:i386` and friends). The Steam
+home (`~/.steam` for the `steam` user, including the game library) is
+linked into the persistent desktop-data area, so installs and logins
+survive rebuilds.
+
+## Minecraft (PrismLauncher)
+
+[PrismLauncher](https://prismlauncher.org) is preinstalled (AppImage,
+extracted to `/opt/apps/prismlauncher`) and fully works in the container.
+
+- **Launch it:** right-click the desktop → **Prism Launcher** (or run
+  `prismlauncher` in a terminal).
+- **First run:** the Quick Setup wizard walks through language and Java
+  detection, then asks for a Microsoft account. Playing Minecraft requires
+  being signed in — the launcher UI works without one, but launching an
+  instance does not.
+- **Instances:** create one with **Add Instance** (pick a Minecraft
+  version — modern versions need Java 21+, which the image provides as a
+  system fallback; the launcher also downloads its own Java per instance).
+
+Minecraft itself runs on software rendering (llvmpipe supports the GL 3.2+
+core profile modern versions need). Expect playable-but-modest FPS on a
+2-core machine; a 4-core machine (`-m standardLinux32gb`) helps a lot. The
+launcher data (`~/.local/share/PrismLauncher` — instances, accounts,
+settings) is linked into the persistent desktop-data area and survives
+rebuilds.
+
 ## Making it faster
 
 - **Use a 4-core machine** (`-m standardLinux32gb` when creating, or change
