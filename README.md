@@ -267,6 +267,13 @@ persistence) is in place. Alternatives while it is blocked:
 - **Sound:** the browser tab streams video only, so Roblox plays silently
   (audio isn't carried through noVNC).
 
+**Separate Windows profile:** the practical way to actually play Roblox is a
+real Windows machine, not the Codespace. The [`windows/` directory](windows/)
+has a documentation-only profile for that — supported Windows host
+requirements, setup, remote-access options, performance tuning, and rules
+for keeping Roblox data separate from this Codespace (it adds no code and
+changes no Codespace behavior; nothing Windows was verified by that branch).
+
 Technical note: Sober is a Flatpak, but Codespaces blocks the kernel
 namespaces its sandbox needs — so the image installs the flatpak, overlays
 its runtime libraries (glibc included) onto the system, mirrors the app
