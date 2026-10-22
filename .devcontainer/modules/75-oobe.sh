@@ -368,15 +368,14 @@ do_action() {
 }
 
 files_action() {
-  # nautilus refuses to work when running as root (its own banner says it
-  # "cannot work correctly if run as root" and it never maps a window), so
-  # as root fall back to a terminal listing of the same folder.
-  if [ "$(id -u)" != "0" ] && command -v nautilus >/dev/null 2>&1; then
+  # nautilus works as root here too (it prints a root warning on stderr,
+  # which is discarded; the window still opens - verified in the codespace)
+  if command -v nautilus >/dev/null 2>&1; then
     launch_bg nautilus "$HOME/Files"
-    return 0
+  else
+    term_run "Files" bash -c \
+      'cd "$HOME/Files" 2>/dev/null || cd "$HOME"; echo "~/Files:"; ls -laF; echo; printf "No graphical file manager found - this is a directory listing.\nPress Enter to close "; read -r _'
   fi
-  term_run "Files" bash -c \
-    'cd "$HOME/Files" 2>/dev/null || cd "$HOME"; echo "~/Files:"; ls -laF; echo; printf "The graphical file manager cannot run as root here - this is a directory listing.\nPress Enter to close "; read -r _'
 }
 
 webgl_test() {
