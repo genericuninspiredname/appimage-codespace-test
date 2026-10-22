@@ -54,9 +54,41 @@ time of this work (`2610195`, `c0eeca5`, `f0783d8`, `a0067d5`, `b7cc933`,
 
 ## Testing
 
-Docs-only change. Verified inside a Codespace on this branch (see branch
-commit message for details): `windows/` files present and readable,
-README links resolve, `tests/idempotence-test.sh` passes (setup unchanged
-and safe to re-run), and a full container rebuild + restart shows no
-regressions from this branch. No Windows host was available, so nothing
-Windows-specific was executed.
+Docs-only change (no scripts, no devcontainer changes). Verified in a
+GitHub Codespace created on this branch (`basicLinux32gb`,
+roblox/optional-windows-profile):
+
+- **Startup:** the desktop (Fluxbox + TigerVNC + noVNC) comes up and
+  answers on forwarded port 6080 with HTTP 200.
+- **Idempotence / repeat-run:** `tests/idempotence-test.sh` — inside the
+  Codespace the suite stops at the "FAIL: steam persistence dir missing"
+  assertion during its steam fixture setup; later assertions are therefore
+  not reached there. That failure **also fails on `master` in the same
+  Codespace** (reproduced by checking out master there), so it is a
+  pre-existing Codespaces artifact, not caused by this branch: Codespaces
+  blocks user namespaces, so the test runs non-isolated and the real
+  setup's `/home/steam/.steam` symlink short-circuits the fixture's
+  `link_dir`. In an environment with user namespaces (the test's
+  preferred mode), the full suite **passes on this branch** and passes on
+  master (verified locally with `set -o pipefail`; exit code 0).
+- **Rebuild:** triggered a full container rebuild on this branch — after
+  it, `windows/` files are present, the branch tip is checked out, the
+  desktop is up on 6080 (HTTP 200), and the first-start marker correctly
+  prevents hooks from re-running.
+- **Stop/start:** a full stop + start cycle preserves the checkout, the
+  `windows/` docs, and the running desktop.
+- **Links:** every URL in the added docs was fetched and returns 200 (the
+  Roblox help-center pages return 403 to automated clients but are
+  Roblox's canonical articles, confirmed via search results).
+- **Accuracy pass:** after initial review, several claims were corrected —
+  the VM recommendation was removed (Roblox's own error-codes page states
+  VMs and cloud computers are not supported), the Sober issue quote is
+  now attributed to a project contributor, the Tailscale and Sunshine
+  claims were reworded to match their sources, and the frame-rate section
+  now cites Roblox's official announcement. All replacement links were
+  re-verified (the Microsoft and Roblox docs return 200; the Roblox help
+  pages 403 to bots as noted).
+
+No Windows host was available to this branch, so nothing Windows-specific
+was executed or verified — the documents state this explicitly and make
+no claim that Roblox works on Windows.

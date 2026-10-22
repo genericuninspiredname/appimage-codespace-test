@@ -7,18 +7,18 @@ Codespace behavior.
 
 ## Why a separate Windows host is required
 
-**Roblox cannot run inside this Codespace — or any Linux container.** The
-Codespace ships the Linux Roblox runtime
-[Sober](https://github.com/vinegarhq/sober), and the launcher gets as far as
-the onboarding UI, but Sober's closed-source anti-tamper layer
-(`libloader.so`) deliberately crashes the Roblox game client whenever it
-detects it is running inside a container or VM. This is intended behavior by
-Sober's maintainers, who confirm that crashes in "a virtual machine,
-container, or anything else designed to automate gameplay" are
-[expected](https://github.com/vinegarhq/sober/issues/2475) — it blocks
-automation/botting, and it cannot be worked around in this repo. See the
-[README's Roblox section](../README.md#roblox) for the full technical
-account of what was verified inside the Codespace.
+**Roblox cannot run inside this Codespace.** As previously verified in this
+repo (see the [README's Roblox section](../README.md#roblox) for the full
+technical account), the Codespace ships the Linux Roblox runtime
+[Sober](https://github.com/vinegarhq/sober), the launcher gets as far as the
+onboarding UI, and then Sober's closed-source anti-tamper layer
+(`libloader.so`) kills the actual Roblox game client. A Sober project
+contributor states that crashes in "a virtual machine, container, or
+anything else designed to automate gameplay" are
+[expected behavior](https://github.com/vinegarhq/sober/issues/2475) — it
+blocks automation/botting, and it cannot be worked around in this repo.
+This branch did not re-run that verification; it relies on the project's
+existing evidence.
 
 Codespaces themselves run Linux only — GitHub documents that Windows and
 macOS are
@@ -27,16 +27,15 @@ as the container OS — so "run Roblox inside the Codespace" is not a possible
 direction at all. Roblox's own support pages likewise state that virtual
 machines and cloud computers are
 [not supported](https://en.help.roblox.com/hc/en-us/articles/36639955031060-Roblox-Error-Codes)
-platforms — a physical Windows host (or a hypervisor VM you assess at your
-own risk) is the supported direction.
+platforms — a **physical Windows host** is the supported profile this
+directory documents. (A hypervisor or cloud Windows machine is *not*
+supported by Roblox and is not covered here.)
 
-The practical answer for real Roblox gameplay is a **real Windows
-machine**: a physical PC you own, a second machine, or a Windows VM on
-hardware you control with a real hypervisor (VMware, Hyper-V, VirtualBox)
-where you can assess the risk of the same anti-container detection yourself.
-No part of Roblox was verified working by this branch: **do not assume
-anything in this directory was tested on Windows.** Everything here is
-guidance to set up and optimize a Windows host yourself.
+The practical answer for real Roblox gameplay is a **physical Windows
+machine** — a PC you own or a second machine. No part of Roblox was
+verified working by this branch: **do not assume anything in this directory
+was tested on Windows.** Everything here is guidance to set up and optimize
+a Windows host yourself.
 
 ## What is in this directory
 
@@ -51,20 +50,25 @@ guidance to set up and optimize a Windows host yourself.
 The Windows host is a **completely separate machine** from the Codespace.
 Keep it that way:
 
-- **Roblox data stays on the Windows host.** The Roblox launcher and player
-  install and store their data under `%LOCALAPPDATA%\Roblox` (i.e.
-  `C:\Users\<name>\AppData\Local\Roblox`) on Windows — see Roblox's
-  [command-line interface docs](https://create.roblox.com/docs/studio/command-line-interface)
-  documenting the `%LOCALAPPDATA%\Roblox` install layout, and
-  [Bloxstrap's documentation](https://github.com/bloxstraplabs/bloxstrap/wiki/)
-  for the same layout. Nothing about this location has any relationship to
-  the Codespace's `/workspaces` or the `desktop-data` branch.
-- **Never push Roblox data to this repo.** The repo's backup branches
-  (`desktop-data`) are for the Codespace's `~/Files` documents only. Roblox
-  saves, screenshots, recordings, and the Roblox install folder live on the
-  Windows host and should be backed up with a Windows backup tool, not with
-  this repo's Codespace tooling (`desktop-backup` / `desktop-profile` will
-  never see the Windows machine and must not be pointed at it).
+- **Roblox data stays on the Windows host.** Roblox's Windows install lives
+  under `%LOCALAPPDATA%\Roblox` (i.e.
+  `C:\Users\<name>\AppData\Local\Roblox`): Roblox's own docs reference
+  that root for its executables — the
+  [Studio CLI docs](https://create.roblox.com/docs/studio/command-line-interface)
+  document `%LOCALAPPDATA%\Roblox\Versions\...`, and the
+  [bundled-installer guide](https://create.roblox.com/docs/education/support/creating-bundled-installers)
+  points both Studio and the player at the same location; Roblox's
+  [uninstall instructions](https://en.help.roblox.com/hc/en-us/articles/203312980-How-to-Uninstall-Roblox)
+  also direct you to delete the Roblox folder under `AppData\Local`. Nothing
+  about this location has any relationship to the Codespace's `/workspaces`
+  or the `desktop-data` branch.
+- **Never push Roblox data to this repo.** The repo's Codespace tools write to
+  the `desktop-data` branch: plain **Back Up Files** commits the Codespace's
+  `~/Files` (documents), and the encrypted profile tool additionally packs
+  the Codespace's browser profile. Roblox saves, screenshots, recordings, and
+  the Roblox install folder live on the Windows host and should be backed up
+  with a Windows backup tool — `desktop-backup` / `desktop-profile` will
+  never see the Windows machine and must not be pointed at it.
 - **Keep accounts/credentials separate.** Signing into Roblox happens on
   the Windows host in the Roblox app; the Codespace's browser profile and
   its stored credentials are separate and should stay that way.

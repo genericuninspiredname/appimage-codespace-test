@@ -19,7 +19,7 @@ on its help site; the current Windows player requirements per that page are:
 | GPU | Any card with DirectX 10 feature level | Integrated graphics (Intel/AMD iGPU) are fine for casual play; a discrete GPU is needed for consistently high graphics levels |
 | Internet | Broadband; Roblox's guidance is 4–8 Mb/s | Latency matters more than raw bandwidth for play |
 | Account | Roblox account, created at roblox.com or in the app | Sign-in happens on the Windows host, not the Codespace |
-| Host type | A physical Windows machine | Roblox's support pages state that virtual machines and cloud computers are [not supported platforms](https://en.help.roblox.com/hc/en-us/articles/36639955031060-Roblox-Error-Codes) — a physical host is the supported route (a hypervisor VM is usable only at your own risk, and may trip the same anti-automation checks that block Sober in containers) |
+| Host type | A physical Windows machine | Roblox's support pages state that virtual machines and cloud computers are [not supported platforms](https://en.help.roblox.com/hc/en-us/articles/36639955031060-Roblox-Error-Codes) — a physical host is the supported route; a hypervisor or cloud Windows machine is unsupported and not covered here |
 
 For **Roblox Studio** (only if you develop, not just play), the requirements
 are higher: Roblox documents a minimum of Windows 10, 3 GB RAM, and a
@@ -38,15 +38,18 @@ Windows 10/11 Pro**, covered in [remote-access.md](remote-access.md).
    whatever Windows Update picked — vendors' own driver packages fix
    rendering issues more often.
 3. Download the Roblox installer from
-   [roblox.com/download](https://www.roblox.com/download) and run it. The
-   player installs itself into `%LOCALAPPDATA%\Roblox` on first launch of
-   any experience; there is no traditional "Programs" install.
+   [roblox.com/download](https://www.roblox.com/download) and run it. Per
+   Roblox's own documentation, the install lives under
+   `%LOCALAPPDATA%\Roblox` (the
+   [Studio CLI docs](https://create.roblox.com/docs/studio/command-line-interface)
+   and the
+   [bundled-installer guide](https://create.roblox.com/docs/education/support/creating-bundled-installers)
+   both reference it) — there is no traditional "Programs" install.
 4. Launch a experience from the website or the app, sign in with your Roblox
    account, and verify the game runs.
-5. Optional: install [Bloxstrap](https://github.com/bloxstraplabs/bloxstrap)
-   (an open-source Roblox launcher wrapper) if you want per-experience
-   graphics and flag management — third-party launchers are community tools,
-   use at your own discretion.
+5. Optional: the community-built [Bloxstrap](https://github.com/bloxstraplabs/bloxstrap)
+   launcher exists as a third-party bootstrapper — it is not required and not
+   verified here; use at your own discretion.
 
 ## First-run checks
 

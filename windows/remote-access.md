@@ -27,10 +27,11 @@ To reach it safely from outside your LAN:
 
 - **Tailscale** (recommended): install it on both the Windows host and your
   remote device, sign both into the same tailnet. Tailscale assigns each
-  machine a private 100.x.y.z address and the connection is
-  [WireGuard-encrypted end to end](https://tailscale.com/kb/1136/tailscale-vs-vpn);
-  the RDP port never needs to be port-forwarded. See Tailscale's
-  [Windows RDP guide](https://tailscale.com/docs/solutions/access-remote-desktops-using-windows-rdp).
+  machine a private 100.x.y.z address and the devices join a secure,
+  encrypted network where they reach each other directly, without port
+  forwarding or public IPs (per Tailscale's
+  [Windows RDP guide](https://tailscale.com/docs/solutions/access-remote-desktops-using-windows-rdp));
+  the RDP port never needs to be port-forwarded.
 - Alternative: any WireGuard or OpenVPN tunnel you control, then RDP inside
   the tunnel.
 
@@ -48,15 +49,14 @@ streaming. For playing Roblox remotely with low latency:
   game-stream server) on the Windows host.
 - Pair a [Moonlight](https://moonlight-stream.org) client (Windows, macOS,
   iOS, Android, tvOS) and stream the Roblox window or the whole desktop.
-- Moonlight is built on the same protocol as NVIDIA GameStream, works with
-  NVIDIA/AMD/Intel GPUs and even software capture, and the
-  [project site](https://moonlight-stream.org) walks through pairing
-  and settings (resolution, frame rate, bitrate — tune these to your
-  network).
+- Moonlight is an open-source implementation of NVIDIA's GameStream
+  protocol (per its [project site](https://moonlight-stream.org)), and the
+  Sunshine host supports hardware encoding on AMD, Intel, and Nvidia GPUs
+  with software encoding as a fallback (per its
+  [project documentation](https://github.com/LizardByte/Sunshine)).
 
 Sunshine's web UI must not be left exposed to the internet either — pair it
-over the LAN or your tailnet, and see the project's
-[security notes](https://github.com/LizardByte/Sunshine#security).
+over the LAN or your tailnet, and never port-forward its web UI.
 
 ## Option 3 — SSH (for admin, not gameplay)
 

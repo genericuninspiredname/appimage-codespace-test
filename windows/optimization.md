@@ -13,11 +13,18 @@ recommendation cites where it comes from. See [setup.md](setup.md) first.
   vendor's own site (not just Windows Update). Roblox relies on your GPU's
   driver for DirectX rendering.
 - **Game Mode:** leave Windows **Game Mode ON** (Settings → Gaming → Game
-  Mode) — it prioritizes the game's CPU/GPU allocation and pauses
-  background updates during play.
+  Mode) — Microsoft's
+  [Game Mode documentation](https://support.microsoft.com/en-us/help/4028293/windows-using-game-mode-on-your-pc)
+  says it "helps achieve a more stable frame rate depending on the specific
+  game and system" and suspends Windows Update driver installs and
+  restart notifications during play. It is on by default; leave it that
+  way unless you have a measured reason not to.
 - **Hardware-accelerated GPU scheduling** (Settings → Display → Graphics →
-  "Change default graphics behavior"): can help on some GPUs; toggle and
-  measure rather than assuming.
+  "Change default graphics behavior"): Microsoft introduced it to reduce
+  GPU scheduling latency (see the
+  [DirectX team's announcement](https://devblogs.microsoft.com/directx/hardware-accelerated-gpu-scheduling/));
+  whether it helps Roblox on your GPU is not documented — toggle and measure
+  rather than assuming.
 - **Startup/background load:** close browsers and background apps while
   playing — Roblox plus a heavy browser can exceed small-RAM machines.
 - **DirectX 10 feature level is the floor:** if the client complains, update
@@ -26,31 +33,41 @@ recommendation cites where it comes from. See [setup.md](setup.md) first.
 
 ## In-game Roblox settings
 
-- **Graphics quality:** Roblox's in-experience Settings → Performance offer a
-  graphics quality slider and, on capable machines, manual graphics modes.
-  For older/integrated-GPU machines, set graphics quality to the lowest 1–2
-  notches. If the GPU is the bottleneck, lowering Windows display resolution
-  helps more than only lowering in-game quality.
-- **Full screen:** run the client full-screen rather than windowed —
-  fewer pixels for Windows to composite.
+- **Graphics quality:** the in-experience Settings menu (Esc → Settings)
+  exposes a graphics quality slider and, on capable machines, manual
+  graphics modes. For older/integrated-GPU machines, set graphics quality
+  to the lowest 1–2 notches and measure.
+- **Full screen:** run the client full-screen rather than windowed — this
+  reduces compositing overhead on Windows (the desktop window manager
+  composites windowed games; full-screen exclusive bypasses it), but the
+  gain varies; measure on your machine.
 
 ## What to avoid
 
-- **Third-party "FPS unlocker" tools:** Roblox's Terms of Use prohibit
-  exploiting or modifying the client; historically the native in-experience
-  maximum-frame-rate setting has replaced the need for unlockers on modern
-  hardware. Prefer the official setting.
+- **Third-party "FPS unlocker" tools:** Roblox's own announcement of the
+  in-game Maximum Frame Rate setting recommends using the setting instead
+  of external unlockers, noting that unlockers change an internal client
+  flag that was never intended as a stable public API and could change
+  without prior notice (see the
+  [announcement](https://devforum.roblox.com/t/introducing-the-maximum-framerate-setting/2995965)).
+  Prefer the official setting; whether unlockers violate the Terms of Use
+  is not for this doc to rule on.
 - **"Optimization" scripts from YouTube/reddit that edit the registry or
   kill services wholesale:** most make no measurable difference for a
   GPU-lightweight game like Roblox, and some break Windows updates.
 
 ## Frame rate
 
-Roblox's own in-experience Settings now include a **Maximum Frame Rate**
-option (up to 240 fps on supported hardware) — use that instead of any
-third-party "FPS unlocker" (see "What to avoid" below). A reasonable cap
-(60–120) keeps the GPU/CPU from being pinned at 100% and reduces fan noise
-and heat with no visible difference on most displays.
+Roblox's official client frame-rate cap is 60 FPS, and users can raise it
+to up to 240 FPS on Windows (per Roblox's
+[performance documentation](https://create.roblox.com/docs/performance-optimization/identify)).
+The in-experience Settings menu exposes a **Maximum Frame Rate** option —
+values Default/60/120/144/240 per Roblox's
+[announcement](https://devforum.roblox.com/t/introducing-the-maximum-framerate-setting/2995965).
+A cap at or below your display's refresh rate keeps the GPU/CPU from being
+pinned at 100% and reduces fan noise and heat; the announcement also notes
+that if your device cannot reach the selected maximum, you should not
+notice a difference.
 
 ## Measuring
 
