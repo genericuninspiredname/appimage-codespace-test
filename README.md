@@ -209,6 +209,50 @@ change, the file is
 `/home/roblox/.var/app/org.vinegarhq.Sober/config/sober/config.json`
 (delete it to reset to defaults).
 
+## Steam
+
+**Status: blocked inside Codespaces by Steam itself — the client requires
+user namespaces, which Codespaces blocks.** Steam is preinstalled (official
+`steam.deb` plus the i386 multilib stack) and everything around the client
+is in place, but launching it inside a Codespace shows Steam's own error
+dialog: "Steam now requires user namespaces to be enabled" (the same
+kernel restriction that blocks Flatpak sandboxes here — see the Roblox
+section). No workaround was found or verified in this repo.
+
+- **Launch it:** right-click the desktop → **Steam** (or run `steam` in a
+  terminal). Inside a Codespace you will see the namespace error dialog.
+  In the container sandbox where the steam branch was developed (user
+  namespaces allowed), the client and sign-in window did render; the same
+  is expected anywhere user namespaces are allowed, but that was not
+  re-verified here.
+- **What is verified everywhere:** the install (i386 stack + `steam.deb`),
+the dedicated non-root `steam` user, the launcher wrapper and the persistent
+home (`~/.steam` for the `steam` user, including the game library, linked
+into the desktop-data area so installs and logins survive rebuilds).
+
+## Minecraft (PrismLauncher)
+
+[PrismLauncher](https://prismlauncher.org) is preinstalled (AppImage,
+extracted to `/opt/apps/prismlauncher`). Its setup wizard and main window
+are verified working in the container; playing Minecraft additionally
+requires a Microsoft account sign-in.
+
+- **Launch it:** right-click the desktop → **Prism Launcher** (or run
+  `prismlauncher` in a terminal).
+- **First run:** the Quick Setup wizard walks through language and Java
+  detection, then asks for a Microsoft account. Playing Minecraft requires
+  being signed in — the launcher UI works without one, but launching an
+  instance does not.
+- **Instances:** create one with **Add Instance** (pick a Minecraft
+  version — modern versions need Java 21+, which the image provides as a
+  system fallback; the launcher also downloads its own Java per instance).
+
+Minecraft renders on software rendering (llvmpipe supports the GL 3.2+
+core profile modern versions need); actual gameplay performance on the
+2-core machine class was not measured in this repo. The launcher data
+(`~/.local/share/PrismLauncher` — instances, accounts, settings) is linked
+into the persistent desktop-data area and survives rebuilds.
+
 ## Making it faster
 
 - **Use a 4-core machine** (`-m standardLinux32gb` when creating, or change
@@ -250,3 +294,35 @@ setup marks it disabled. Other AppImages may need
   (even stopped). Stop when done for the day; delete when done for good.
 - Deleting a codespace does not touch the repo — you can always create a new one
   (and **Back Up Files** restores your documents).
+
+## Repository layout (setup architecture)
+
+`.devcontainer/setup.sh` is only a **coordinator**: it sets up the shared
+environment, then sources the modules in `.devcontainer/modules/` in
+lexical order:
+
+| Module | Responsibility |
+|--------|----------------|
+| `10-persistence.sh` | Persistent data dir, home symlinks, `desktop-backup` |
+| `20-browser.sh` | Browser launcher, WebGL prefs, namespaces-check flag |
+| `30-roblox.sh` | Optional Roblox/Sober setup (image-dependent steps guarded; user, links and launchers always installed) |
+| `40-profiles.sh` | Encrypted save profiles (`desktop-profile`) |
+| `50-menu.sh` | Fluxbox desktop menu entries |
+| `60-fluxbox.sh` | Wallpaper, init, style overlay, keys, shortcuts |
+| `70-diagnostics.sh` | git safe.directory fix, reapply to a running desktop |
+
+After the modules it runs **lifecycle hooks** (see
+`.devcontainer/hooks/README.md`):
+
+- `hooks/first-start.d/` — once per codespace (creation)
+- `hooks/normal-start.d/` — every start, including after rebuilds
+
+Codespaces passes the mode explicitly (`postCreateCommand` →
+`first-start`, `postStartCommand` → `normal-start`); a manual
+`bash .devcontainer/setup.sh` infers it from the persisted marker
+`$DATA_DIR/.first-start-complete`.
+
+**Feature branches:** add a new numbered module or a hook script instead
+of editing existing files — that is the whole point of this layout, it
+keeps merges conflict-free. `tests/idempotence-test.sh` verifies setup
+is safe to run repeatedly; run it after changing anything here.
