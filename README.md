@@ -39,7 +39,11 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
 - **Window switching:** Alt+Tab works with a native VNC client, but the browser
   or OS usually swallows it when you're in the noVNC tab — **Alt+`**
   (backtick) is an alternative that is usually not intercepted. The menu's
-  **Keyboard Shortcuts** entry lists everything.
+  **Keyboard Shortcuts** entry lists everything. **Ctrl+Alt+Shift+Left/
+  Right** sends the active window to the previous/next workspace.
+- **Active window:** the focused window has a blue titlebar and a blue taskbar
+  button; inactive windows are muted grey, so it's always obvious which
+  window keystrokes go to.
 - **Task manager:** right-click → **Task Manager** (or press
   **Ctrl+Alt+Delete**) opens `htop` in a terminal — CPU, memory, and
   processes, with F9 to kill a stuck app.
