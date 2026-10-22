@@ -153,15 +153,23 @@ HOMEDIR="$FX/home" DATA_DIR="$FX/data" BIN_DIR="$FX/bin" \
 WELCOME="$FX/bin/desktop-welcome"
 
 # --- zenity stub: stateful (first call exits A, later calls exit B); ----------
-# --- logs every invocation; optional stderr text -------------------------------
-make_zenity_stub() { # <first-exit> <later-exit> [stderr-text]
+# --- logs every invocation; optional stderr text and stdout text --------------
+# The stdout text emulates zenity 4 extra buttons (label printed to stdout,
+# exit 1); the stderr text emulates both zenity 3 extra buttons (label on
+# stderr, exit 5) and display-error messages.
+make_zenity_stub() { # <first-exit> <later-exit> [stderr-text] [stdout-text]
+  # stderr/stdout text is only emitted on the FIRST call (a label on every
+  # call would make the dialog loop forever: action -> re-render -> action)
   cat > "$FX/stub/zenity" <<STUB
 #!/bin/sh
 n=\$(cat "$FX/zenity.count" 2>/dev/null || echo 0)
 echo \$((n + 1)) > "$FX/zenity.count"
 echo "zenity \$*" >> "$FX/zenity.log"
-if [ -n "${3:-}" ]; then printf '%s\n' "$3" >&2; fi
-if [ "\$n" -eq 0 ]; then exit $1; fi
+if [ "\$n" -eq 0 ]; then
+  if [ -n "${3:-}" ]; then printf '%s\n' "$3" >&2; fi
+  if [ -n "${4:-}" ]; then printf '%s\n' "$4"; fi
+  exit $1
+fi
 exit $2
 STUB
   chmod +x "$FX/stub/zenity"
@@ -303,6 +311,77 @@ chmod +x "$FX/stub/xdpyinfo"
 rm -f "$FX/zenity.log" "$FX/zenity.count"
 run_welcome >/dev/null 2>&1 || fail "manual run failed with working stubs"
 [ -f "$FX/zenity.log" ] || fail "manual run did not show the dialog"
+
+# --- extra-button dispatch (regression: zenity 4 changed the protocol) ----------
+echo "  extra buttons: zenity 4 style (exit 1, label on stdout)"
+# stubs that make the actions observable
+for cmd in nautilus desktop-doctor x-www-browser; do
+  printf '#!/bin/sh\necho "%s $*" >> "%s/%s.log"\n' "$cmd" "$FX" "$cmd" > "$FX/stub/$cmd"
+  chmod +x "$FX/stub/$cmd"
+done
+cat > "$FX/stub/xterm" <<STUB
+#!/bin/sh
+echo "xterm \$*" >> "$FX/xterm.log"
+STUB
+chmod +x "$FX/stub/xterm"
+
+# Files -> nautilus on the Files directory
+make_zenity_stub 1 1 "" "Files"
+rm -f "$FX/nautilus.log" "$FX/zenity.log" "$FX/zenity.count"
+run_welcome >/dev/null 2>&1
+grep -q "nautilus .*Files" "$FX/nautilus.log" 2>/dev/null \
+  || fail "Files button did not dispatch to nautilus"
+
+# WebGL Test -> desktop-doctor (diagnostics interface) in a terminal
+make_zenity_stub 1 1 "" "WebGL Test"
+rm -f "$FX/xterm.log" "$FX/zenity.log" "$FX/zenity.count"
+run_welcome >/dev/null 2>&1
+grep -q "desktop-doctor" "$FX/xterm.log" 2>/dev/null \
+  || fail "WebGL Test button did not dispatch to desktop-doctor"
+
+# Performance Settings -> its info window (zenity --text-info)
+make_zenity_stub 1 1 "" "Performance Settings"
+rm -f "$FX/zenity.log" "$FX/zenity.count"
+run_welcome >/dev/null 2>&1
+grep -q -- "--text-info --title Performance Settings" "$FX/zenity.log" \
+  || fail "Performance Settings button did not open its window"
+
+# Stop Instructions -> its info window
+make_zenity_stub 1 1 "" "Stop Instructions"
+rm -f "$FX/zenity.log" "$FX/zenity.count"
+run_welcome >/dev/null 2>&1
+grep -q -- "--text-info --title Stopping the codespace" "$FX/zenity.log" \
+  || fail "Stop Instructions button did not open its window"
+
+# Browser (OK button) -> x-www-browser
+make_zenity_stub 0 1
+rm -f "$FX/x-www-browser.log" "$FX/zenity.log" "$FX/zenity.count"
+run_welcome >/dev/null 2>&1
+grep -q "x-www-browser" "$FX/x-www-browser.log" 2>/dev/null \
+  || fail "Browser button did not dispatch to x-www-browser"
+
+echo "  extra buttons: zenity 3 style (exit 5, label on stderr)"
+make_zenity_stub 5 5 "Files"
+rm -f "$FX/nautilus.log" "$FX/zenity.log" "$FX/zenity.count"
+# exit 1 expected: the re-rendered dialog "fails" (timeout semantics)
+run_welcome >/dev/null 2>&1 || true
+grep -q "nautilus .*Files" "$FX/nautilus.log" 2>/dev/null \
+  || fail "zenity 3 Files button did not dispatch to nautilus"
+
+# zenity 3 timeout: exit 5 with no label must NOT be treated as Close
+# (no marker write; the run fails so onboarding retries next launch)
+rm -f "$MARKER"
+make_zenity_stub 5 5
+cat > "$FX/stub/xdpyinfo" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$FX/stub/xdpyinfo"
+run_welcome --auto >/dev/null 2>&1 \
+  && fail "zenity-3 timeout (exit 5, no label) wrongly treated as success"
+[ -f "$MARKER" ] && fail "timeout dialog marked the first launch done"
+rm -f "$FX/stub/nautilus" "$FX/stub/desktop-doctor" \
+      "$FX/stub/x-www-browser" "$FX/stub/xterm"
 
 # --- classify_renderer evidence rules -------------------------------------------
 echo "  classify_renderer evidence rules"

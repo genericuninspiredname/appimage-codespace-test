@@ -295,36 +295,49 @@ term_run() {
 # Returns 2 when the dialog could not be displayed (caller must NOT mark
 # the first launch done in that case).
 main_dialog() {
-  local body_file out rc action=""
+  local body_file out rc action="" err_file err combined
   body_file=$(mktemp) || return 2
   build_body > "$body_file"
   if [ "$TOOL" = zenity ]; then
-    # GTK question dialog: OK + Cancel + extra buttons (zenity prints the
-    # pressed extra button's label to stderr and exits 5). WM close and
-    # Cancel both exit 1; "cannot open display" also exits 1 but prints an
-    # error, which is kept distinct from a plain close below.
+    # GTK question dialog: OK + Cancel + extra buttons. Extra-button
+    # reporting differs across zenity versions, so BOTH streams are kept:
+    #   zenity 4: extra button -> exit 1, label printed to STDOUT
+    #             (Cancel and WM close also exit 1 but print no label;
+    #              GTK warnings on stderr are ignored as noise)
+    #   zenity 3: extra button -> exit 5, label printed to STDERR
+    # A missing display also exits 1 but reports the error on stderr -
+    # that is kept distinct from a plain close below.
+    err_file=$(mktemp) || { rm -f "$body_file"; return 2; }
     out=$(zenity --question --title "Welcome to your desktop" --no-wrap \
           --text "$(cat "$body_file")" \
           --ok-label "Browser" --cancel-label "Close" \
           --extra-button "Files" \
           --extra-button "WebGL Test" \
           --extra-button "Performance Settings" \
-          --extra-button "Stop Instructions" 2>&1 >/dev/null)
+          --extra-button "Stop Instructions" 2>"$err_file")
     rc=$?
+    err=$(cat "$err_file" 2>/dev/null); rm -f "$err_file"
+    combined="$out$err"
     case "$rc" in
       0) action=browser ;;
-      1) case "$out" in
-           *"cannot open display"*|*"Unable to init"*|*"Cannot open display"*)
-             rm -f "$body_file"; return 2 ;;
-           *) action=close ;;
-         esac ;;
-      5) case "$out" in
-           "Files")                 action=files ;;
-           "WebGL Test")            action=webgl ;;
-           "Performance Settings") action=perf ;;
-           "Stop Instructions")     action=stop ;;
-           *) rm -f "$body_file"; return 2 ;;
-         esac ;;
+      1|5)
+        case "$combined" in
+          *"cannot open display"*|*"Unable to init"*|*"Cannot open display"*)
+            rm -f "$body_file"; return 2 ;;
+        esac
+        case "$combined" in
+          *"Files")                 action=files ;;
+          *"WebGL Test")            action=webgl ;;
+          *"Performance Settings") action=perf ;;
+          *"Stop Instructions")     action=stop ;;
+          *)
+            # zenity 3 reports a timeout as exit 5 without a label;
+            # treat it as "dialog failed" so onboarding retries later
+            if [ "$rc" -eq 5 ]; then
+              rm -f "$body_file"; return 2
+            fi
+            action=close ;;
+        esac ;;
       *) rm -f "$body_file"; return 2 ;;
     esac
   else  # xmessage: one real button per action
