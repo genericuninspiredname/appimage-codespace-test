@@ -99,6 +99,14 @@ parse_xdpy() {
 # gib <kib> -> "<x.x>" (GiB, one decimal)
 gib() { awk -v k="${1:-0}" 'BEGIN{printf "%.1f", k/1048576}'; }
 
+# cgib <bytes> -> "<x.x>" (GiB, one decimal). cgroup memory files hold
+# BYTES (unlike /proc/meminfo's KiB): feeding them to gib() would read
+# 1024x too large.
+cgib() { awk -v b="${1:-0}" 'BEGIN{printf "%.1f", b/1073741824}'; }
+
+# fmt_cgroup_mem <cur-bytes> <max-bytes> -> the container memory line
+fmt_cgroup_mem() { echo "$(cgib "${1:-0}")/$(cgib "${2:-0}") GiB container (cgroup limit)"; }
+
 # backup_status <data-dir>: prints the honest backup state.
 #  - a local backup commit is NOT proof of upload: push state is compared
 #    against the last known remote ref (no network fetch happens here).
@@ -196,7 +204,7 @@ build_body() {
       # host, so it would be misleading as a container number
       mem_cont="no container memory limit (host view above)"
     else
-      mem_cont="$(gib "$mem_cur")/$(gib "$mem_max") GiB container (cgroup limit)"
+      mem_cont=$(fmt_cgroup_mem "$mem_cur" "$mem_max")
     fi
   else
     mem_cont="container memory unknown (no cgroup memory controller)"
@@ -214,14 +222,17 @@ build_body() {
     res_line="unknown (no reachable X display)"
   fi
 
-  # WebGL: honest by default - "not tested" until a real browser context
-  # test ran. desktop-doctor (diagnostics branch) is the test tool.
+  # WebGL: the welcome keeps no test state and cannot know whether a
+  # test ran before - say so instead of implying a one-time "not tested"
+  # status. desktop-doctor (diagnostics branch) is the test tool; it also
+  # keeps no result state (run-and-report), which is why nothing is
+  # consumed here.
   if command -v desktop-doctor >/dev/null 2>&1; then
-    webgl="WebGL:  not tested yet - the WebGL Test button runs desktop-doctor"
+    webgl="WebGL:  no test result kept here - the WebGL Test button runs desktop-doctor"
   else
-    webgl="WebGL:  not tested yet - desktop-doctor (diagnostics branch)"
-    webgl="$webgl is not installed here;"
-    webgl="$webgl WebGL Test falls back to a GLX renderer check"
+    webgl="WebGL:  no test result kept here - desktop-doctor (diagnostics branch)"
+    webgl="$webgl is not installed;"
+    webgl="$webgl WebGL Test falls back to a GLX renderer check (not a browser test)"
   fi
 
   # GLX renderer evidence, clearly labeled as such (not a browser test)
@@ -549,6 +560,7 @@ case "${1:-}" in
   --print)      build_body ;;
   --webgl-quick) webgl_quick_mode ;;
   --classify-renderer) shift; classify_renderer "${1:-}" ;;  # test hook
+  --cgroup-mem)      shift; fmt_cgroup_mem "${1:-0}" "${2:-0}" ;;  # test hook
   --help|-h)
     sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' ;;
   "")

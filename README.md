@@ -62,7 +62,7 @@ It shows what this environment is and how healthy it is:
   detected from Codespaces/WSL evidence, never guessed.
 - **CPU** (cores, model, load; host view and the container limit),
   **memory** (host usage and the container limit), **screen resolution**.
-- **WebGL status:** honestly "not tested" until a test runs. The
+- **WebGL status:** the welcome keeps no test state (and says so); the
   **WebGL Test** button runs `desktop-doctor` (the diagnostics tool) when
   it is installed on this branch; otherwise it falls back to a clearly
   labeled GLX renderer check. A GLX software renderer (llvmpipe) is normal

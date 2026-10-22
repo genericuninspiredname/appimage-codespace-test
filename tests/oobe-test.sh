@@ -112,6 +112,20 @@ run_setup() { # run_setup <fixture-root> <mode>
   fi
 }
 
+# The normal-start hook launches the fixture welcome detached (setsid);
+# with no reachable display it exits after MAX_WAIT. Wait for that so the
+# EXIT trap's teardown never races a live writer (which used to leave
+# /tmp/oobe-test.* dirs behind: rm -rf failed with "Directory not empty").
+wait_welcome_exit() { # <fixture-root>
+  local fx="$1" i
+  sleep 0.2   # setsid is asynchronous: give the welcome a moment to start
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    pgrep -f "$fx/bin/desktop-welcome" >/dev/null 2>&1 || return 0
+    sleep 1
+  done
+  pkill -f "$fx/bin/desktop-welcome" 2>/dev/null || true
+}
+
 snapshot() {
   {
     # .oobe-lock is the transient single-instance lock of the backgrounded
@@ -135,6 +149,7 @@ snapshot() {
 # =========================================================================== phase 1
 echo "== phase 1: coordinator installs the OOBE (first-start)"
 run_setup "$WORK" first-start || fail "first-start run exited non-zero"
+wait_welcome_exit "$WORK"
 WELCOME="$WORK/bin/desktop-welcome"
 [ -x "$WELCOME" ] || fail "desktop-welcome not installed/executable"
 MENU="$WORK/data/private/fluxbox/menu"
@@ -149,6 +164,7 @@ snapshot > "$WORK/snap1"
 
 echo "== phase 1: normal-start (hook fires; state must stay identical)"
 run_setup "$WORK" normal-start || fail "normal-start run exited non-zero"
+wait_welcome_exit "$WORK"
 grep -c '^# >>> desktop-oobe >>>' "$MENU" | grep -qx 1 || fail "menu block duplicated on re-run"
 snapshot > "$WORK/snap2"
 diff "$WORK/snap1" "$WORK/snap2" > /dev/null || fail "state changed between runs"
@@ -221,9 +237,9 @@ out=$(CODESPACES= CODESPACE_NAME= DESKTOP_WELCOME_PROC_VERSION='Linux version 6.
 grep -q 'Environment: Unknown host' <<< "$out" || fail "unknown host not honest"
 
 # --- --print: honest WebGL wording --------------------------------------------
-echo "  --print: honest WebGL wording (never 'available' when untested)"
+echo "  --print: honest WebGL wording (never 'available' without a test)"
 out=$(run_welcome --print)
-grep -q 'WebGL:.*not tested' <<< "$out" || fail "WebGL status not 'not tested'"
+grep -q 'WebGL:.*no test result kept here' <<< "$out" || fail "WebGL status not honest about kept state"
 if grep -q 'WebGL:.*available' <<< "$out"; then fail "WebGL claimed available without a test"; fi
 grep -q 'desktop-doctor (diagnostics branch) is not installed' <<< "$out" || fail "missing desktop-doctor not stated"
 # with a desktop-doctor stub installed, the wording switches to the tool
@@ -416,5 +432,12 @@ classify() { run_welcome --classify-renderer "$1"; }
 [ "$(classify 'ANGLE (Intel, Mesa Intel(R) UHD Graphics)')" = "hardware" ] || fail "real GPU not hardware"
 [ "$(classify '')" = "unknown" ] || fail "empty renderer not unknown"
 [ "$(classify 'WebGL is disabled')" = "unknown" ] || fail "disabled string not unknown"
+
+# --- cgroup memory is converted from BYTES ---------------------------------------
+echo "  cgroup memory line (bytes, not KiB - regression: was 1024x too large)"
+[ "$(run_welcome --cgroup-mem 1073741824 4294967296)" = "1.0/4.0 GiB container (cgroup limit)" ] \
+  || fail "cgroup memory mis-scaled (1 GiB/4 GiB input)"
+[ "$(run_welcome --cgroup-mem 536870912 1073741824)" = "0.5/1.0 GiB container (cgroup limit)" ] \
+  || fail "cgroup memory mis-scaled (0.5 GiB/1 GiB input)"
 
 echo "PASS: OOBE installed idempotently; gating, status text and fallbacks verified"
