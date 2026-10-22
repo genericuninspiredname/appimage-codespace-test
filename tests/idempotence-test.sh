@@ -20,13 +20,13 @@
 # is retried on the next run.
 #
 # The fixture stubs commands that need the built image or a real root
-# system (useradd/chown/xhost, id for the roblox user) and isolates git's
+# system (useradd/chown/xhost) and isolates git's
 # global config via GIT_CONFIG_GLOBAL. When user namespaces are available
 # the run happens inside a private user+mount namespace (tmpfs over /run
 # and /home) so nothing outside the temp dir is touched; when they are
 # not (e.g. Codespaces, which blocks unshare) and we are root, the run
 # happens directly - its side effects are the same paths the real setup
-# manages (/home/roblox link, /run/user/<uid>) and self-heal on the next
+# manages and self-heal on the next
 # real setup run.
 set -e
 
@@ -41,45 +41,8 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 ISOLATED=0
 if unshare -rm true 2>/dev/null; then ISOLATED=1; fi
 
-# --- live app-home links (unisolated runs only, e.g. inside a Codespace) -----
-# The unisolated run repoints REAL app-home symlinks into the temporary
-# fixture: 30-roblox.sh repoints /home/roblox/.var/app/org.vinegarhq.Sober
-# and 35-steam.sh repoints /home/steam/.steam and
-# /home/steam/.local/share/Steam. Save each existing symlink and restore it
-# on exit; links the test itself created (pointing into $WORK) are removed
-# at cleanup so nothing is left dangling. A REAL directory at any of these
-# paths would be destructively migrated by link_dir - refuse to run then.
-LIVE_LINKS=(
-  "/home/steam/.steam"
-  "/home/steam/.local/share/Steam"
-  "/home/roblox/.var/app/org.vinegarhq.Sober"
-)
-declare -A LIVE_LINK_BACKUP
-if [ "$ISOLATED" = 0 ]; then
-  for p in "${LIVE_LINKS[@]}"; do
-    if [ -L "$p" ]; then
-      LIVE_LINK_BACKUP["$p"]=$(readlink "$p")
-      rm "$p"
-    elif [ -d "$p" ]; then
-      fail "refusing to run: $p is a real directory (would be migrated)"
-    fi
-  done
-fi
 cleanup() {
   rm -rf "$WORK"
-  if [ "$ISOLATED" = 0 ]; then
-    for p in "${LIVE_LINKS[@]}"; do
-      # remove links the test created into the fixture, restore saved ones
-      if [ -L "$p" ]; then
-        tgt=$(readlink "$p")
-        case "$tgt" in "$WORK"/*) rm "$p";; esac
-      fi
-      if [ -n "${LIVE_LINK_BACKUP[$p]:-}" ]; then
-        mkdir -p "$(dirname "$p")"
-        ln -sfn "${LIVE_LINK_BACKUP[$p]}" "$p"
-      fi
-    done
-  fi
 }
 trap cleanup EXIT
 
@@ -93,16 +56,6 @@ for cmd in useradd chown xhost; do
     > "$WORK/stub/$cmd"
   chmod +x "$WORK/stub/$cmd"
 done
-# id: answer for the roblox and steam users, pass everything else through
-cat > "$WORK/stub/id" <<'EOF'
-#!/bin/sh
-case " $* " in
-  *" roblox"*|*"roblox "*) echo 4242; exit 0;;
-  *" steam"*|*"steam "*)  echo 4243; exit 0;;
-esac
-exec /usr/bin/id "$@"
-EOF
-chmod +x "$WORK/stub/id"
 
 # --- fixture: a copy of .devcontainer + repo (setup resolves modules
 # relatively; the repo copy keeps wallpaper copying exercisable even when
@@ -121,7 +74,7 @@ chmod +x "$WORK/dc/hooks/first-start.d/90-test.sh" "$WORK/dc/hooks/normal-start.
 H="$WORK/home"
 mkdir -p "$H/.fluxbox" "$H/Files/docs" "$H/.mozilla/firefox/abc123.default-release" \
          "$H/.config/mozilla/firefox/cfg789.default" \
-         "$H/.var/app/org.vinegarhq.Sober" "$H/.cache"
+         "$H/.cache"
 echo "hello" > "$H/Files/docs/note.txt"
 # the pkgforge Firefox AppImage keeps profiles under ~/.config/mozilla -
 # give it the same "used" profile shape as the ~/.mozilla one
@@ -135,7 +88,6 @@ EOF
 printf 'session.screen0.workspaces: 2\n' > "$H/.fluxbox/init"
 printf 'user_pref("webgl.disabled", true);\nuser_pref("user.set", 1);\n' \
   > "$H/.mozilla/firefox/abc123.default-release/user.js"
-echo x > "$H/.var/app/org.vinegarhq.Sober/state.json"
 printf 'Old User Line\n' > "$H/.fluxbox/keys"
 
 mkdir -p "$WORK/data" "$WORK/bin" "$WORK/xwww-dir"
@@ -232,12 +184,8 @@ ls "$WORK"/data/files/Imported-from-home-*/docs/note.txt >/dev/null 2>&1 \
   || fail "home Files not imported into data dir"
 [ -x "$WORK/bin/desktop-backup" ] || fail "desktop-backup not installed"
 [ -x "$WORK/bin/desktop-profile" ] || fail "desktop-profile not installed"
-[ -x "$WORK/bin/steam" ] || fail "steam launcher not installed"
 [ -x "$WORK/bin/prismlauncher" ] || fail "prismlauncher launcher not installed"
-grep -q '\[exec\] (Steam) {steam}' "$MENU" || fail "Steam menu entry missing"
 grep -q '\[exec\] (Prism Launcher) {prismlauncher}' "$MENU" || fail "Prism Launcher menu entry missing"
-[ "$(grep -c '(Steam) {steam}' "$MENU")" = 1 ] || fail "Steam menu entry duplicated"
-[ -d "$WORK/data/private/steam-home/steam" ] || fail "steam persistence dir missing"
 [ -L "$H/.local/share/PrismLauncher" ] \
   || fail "PrismLauncher data not linked into persistent dir"
 [ -x "$WORK/xwww-dir/x-www-browser" ] || fail "browser launcher not installed"

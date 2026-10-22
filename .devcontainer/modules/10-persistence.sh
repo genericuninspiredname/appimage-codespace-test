@@ -80,8 +80,6 @@ link_dir() { # link_dir <src> <dest> [migrate]
 
 link_dir "$HOMEDIR/Files"                     "$DATA_DIR/files" 1
 link_dir "$HOMEDIR/.mozilla"                   "$DATA_DIR/private/mozilla"
-# Roblox/Sober data (client downloads, login, settings) survives rebuilds
-link_dir "$HOMEDIR/.var/app/org.vinegarhq.Sober"  "$DATA_DIR/private/sober"
 link_dir "$HOMEDIR/.fluxbox"                  "$DATA_DIR/private/fluxbox"
 
 # ---------------------------------------------------------------------------

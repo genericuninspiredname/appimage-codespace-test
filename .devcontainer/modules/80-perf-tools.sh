@@ -79,7 +79,7 @@ fi
 echo
 echo "Desktop apps currently running:"
 found=0
-for p in fluxbox Xvnc websockify firefox steam prismlauncher; do
+for p in fluxbox Xvnc websockify firefox prismlauncher; do
   if pgrep -x "$p" >/dev/null 2>&1; then
     echo "  $p (pid $(pgrep -x "$p" | head -1))"
     found=1
