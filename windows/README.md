@@ -33,7 +33,7 @@ supported by Roblox and is not covered here.)
 
 The practical answer for real Roblox gameplay is a **physical Windows
 machine** — a PC you own or a second machine. No part of Roblox was
-verified working by this branch: **do not assume anything in this directory
+verified on Windows by anyone in this repo: **do not assume anything in this directory
 was tested on Windows.** Everything here is guidance to set up and optimize
 a Windows host yourself.
 
@@ -80,8 +80,8 @@ Keep it that way:
 | Claim | Status |
 |-------|--------|
 | Linux Sober blocked by anti-container protections in Codespaces | Verified (see [README](../README.md#roblox)) |
-| Roblox works on a Windows host described here | **Not verified by this branch — documentation only** |
-| Remote access methods (RDP/SSH/Sunshine) work as described | Documented from vendor documentation; not verified on a Windows host by this branch |
+| Roblox works on a Windows host described here | **Not verified on Windows — documentation only** |
+| Remote access methods (RDP/SSH/Sunshine) work as described | Documented from vendor documentation; not verified on a Windows host |
 
 If you set up a Windows host and verify anything in these documents, please
 update this table with your results.
