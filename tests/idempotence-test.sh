@@ -33,7 +33,23 @@ set -e
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 WORK=$(mktemp -d /tmp/setup-idem.XXXXXX)
-trap 'rm -rf "$WORK"' EXIT
+# When this test runs unisolated inside a Codespace (user namespaces are
+# blocked there), /home/steam/.steam is a symlink created by the REAL
+# setup; link_dir would early-return on it and the fixture's steam dir
+# would never be created. Save it, remove it for the duration of the test,
+# and restore it on exit so the real setup state is preserved.
+STEAM_LINK_BACKUP=""
+if [ -L /home/steam/.steam ]; then
+  STEAM_LINK_BACKUP=$(readlink /home/steam/.steam)
+  rm /home/steam/.steam
+fi
+cleanup() {
+  rm -rf "$WORK"
+  if [ -n "$STEAM_LINK_BACKUP" ]; then
+    ln -sfn "$STEAM_LINK_BACKUP" /home/steam/.steam
+  fi
+}
+trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
