@@ -55,6 +55,37 @@ gh codespace delete -c <name>    # delete (frees disk storage billing too)
   the codespace) to refresh the taskbar, wallpaper, and shortcuts without
   closing your windows.
 
+## First-run welcome screen
+
+The first time the desktop starts, a small **welcome screen** opens on it
+(only on that first launch; it never re-appears on its own after that —
+reopen it any time via the menu: **right-click → Welcome Screen**).
+
+It shows what this environment is and how healthy it is:
+
+- **Environment:** Linux (GitHub Codespace) / Windows host (WSL) / unknown —
+  detected from Codespaces/WSL evidence, never guessed.
+- **CPU** (cores, model, load; host view and the container limit),
+  **memory** (host usage and the container limit), **screen resolution**.
+- **WebGL status:** the welcome keeps no test state (and says so); the
+  **WebGL Test** button runs `desktop-doctor` (the diagnostics tool) when
+  it is installed on this branch; otherwise it falls back to a clearly
+  labeled GLX renderer check. A GLX software renderer (llvmpipe) is normal
+  here — there is no GPU.
+- **Backup status:** whether (and when) `~/Files` was last backed up, and
+  whether the latest backup reached GitHub.
+
+Its buttons: **Browser** (Firefox), **Files** (your persistent folder),
+**WebGL Test**, **Performance Settings** (resolution selector + machine-size
+tips), and **Stop Instructions** (how to stop or delete the codespace to
+stop billing — displayed only, nothing is stopped).
+
+Implementation: a single one-shot dialog (`desktop-welcome`, plain bash +
+zenity/xmessage — no framework, no background service). The "already shown"
+marker lives in the persistent data dir but is never committed by
+`desktop-backup`, so a **rebuild** does not re-show it, while a **new
+codespace restored from a backup** shows it again.
+
 ## Files and persistence
 
 **Where to save things:** the **Files** menu entry (or `~/Files` in a terminal)
