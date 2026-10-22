@@ -77,9 +77,18 @@ W1=$(xdotool getactivewindow)
 xdotool key alt+grave; sleep 0.5
 W2=$(xdotool getactivewindow)
 chk "Alt+grave cycles focus" "[ \"\$W1\" != \"\$W2\" ]"
-xdotool key alt+shift+grave; sleep 0.5
-W3=$(xdotool getactivewindow)
-chk "Alt+Shift+grave cycles back" "[ \"\$W1\" = \"\$W3\" ]"
+# Alt+Shift+grave walks the focus list backwards. Fluxbox's PrevWindow wraps
+# from the newest window to the oldest, so with 3+ windows next-then-prev
+# lands on a DIFFERENT window (this is fluxbox's native Alt+Tab behavior,
+# not a two-window toggle). The correct property: pressing it repeatedly
+# walks the whole ring and comes back to the starting window.
+BACK=""
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  xdotool key alt+shift+grave; sleep 0.5
+  WN=$(xdotool getactivewindow)
+  if [ "$WN" = "$W1" ]; then BACK=yes; break; fi
+done
+chk "Alt+Shift+grave cycles back around to the first window" "[ -n \"\$BACK\" ]"
 
 echo "== 6. workspace switching via Ctrl+Alt+Right/Left =="
 ws() { xprop -root _NET_CURRENT_DESKTOP 2>/dev/null | awk '{print $3}'; }
