@@ -54,6 +54,7 @@ check unknown "unknown"
 check unknown "Mozilla"
 check unknown "WebKit WebGL"
 check unknown "Mozilla Corporation"
+check unknown "Generic Renderer"
 
 # --- parse_xdpy ---------------------------------------------------------------
 xdpy_out='name of display:    :1

@@ -60,7 +60,7 @@ hint()  { HINTS+=("$*"); }
 # stay unknown rather than being assumed hardware.
 classify_renderer() {
   case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
-    ""|"unknown"|"mozilla"*|"webkit webgl"*|*"webgl is disabled"*) echo "unknown" ;;
+    ""|"unknown"|"mozilla"*|"webkit webgl"*|*"webgl is disabled"*|*generic*) echo "unknown" ;;
     *llvmpipe*|*softpipe*|*swrast*|*software*|*swiftshader*|*basic\ render*|*mesa\ offscreen*|*angle\ \(software*) echo "software" ;;
     *) echo "hardware" ;;
   esac

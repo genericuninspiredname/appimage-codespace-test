@@ -95,22 +95,27 @@ terminal), next to the existing Task Manager entry.
   a degraded container with the plain base image — observed once,
   cause not established; the second rebuild built the project image
   correctly).
-- WebGL probe in the codespace: the browser launched but never loaded
-  the probe page, so the positive path (context available, renderer
-  reported) could not be observed in this environment. The same
-  no-render behavior was observed on a separate master codespace with
-  the project launcher, with fluxbox-remote, and for plain `file://`
-  and remote URLs — cause not established (it predates this branch).
-  In that situation the tool reports the failed check honestly
-  (nonzero exit, targeted hint) rather than claiming WebGL works or
-  does not. The full success and failure paths are covered by the
-  stub-browser tests.
+- WebGL probe in the codespace: verified end-to-end — the browser
+  loaded the served probe page on the desktop display and reported a
+  `webgl2` context with its renderer string; the tool classified the
+  masked "Generic Renderer" string as **unknown** (not hardware),
+  honestly, since no real renderer implementation was named. On the
+  codespace's first container instance (before a rebuild) the browser
+  opened a window but never loaded any page (remote and `file://` URLs
+  alike), so the probe there reported the failed check with a nonzero
+  exit — cause of that instance's failure not established; after the
+  rebuild the browser rendered normally. Both the success path and the
+  honest-failure path were exercised against the real browser, and the
+  full matrix (success, no-context, timeout, early exit, cleanup,
+  missing browser) is covered by the stub-browser tests.
 
 Remaining limitations:
 
-- The WebGL probe's positive path is implemented and unit-tested with
-  a stub browser, but was not observed with the real browser in this
-  environment (see above).
+- The renderer string the real browser reports in this environment is
+  a masked "Generic Renderer", so the tool correctly classifies
+  rendering as **unknown** rather than guessing software/hardware;
+  the software-renderer classification is verified through GLX
+  evidence and unit tests, not through the browser's own string.
 - `glxinfo` is not part of the image (not in `install-apps.sh` on
   master), so GLX evidence appears only when it is installed manually;
   the tool notes this.
