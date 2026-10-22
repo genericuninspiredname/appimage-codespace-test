@@ -257,7 +257,7 @@ check_webgl() {
       note "no webgl prefs found in Firefox profiles"
     fi
   else
-    note "no Firefox profiles found in ~/.mozilla"
+    note "no Firefox profiles with managed webgl prefs found in ~/.mozilla"
   fi
 
   # GLX evidence on the desktop display
