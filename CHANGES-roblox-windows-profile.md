@@ -71,23 +71,31 @@ roblox/optional-windows-profile):
   `link_dir`. In an environment with user namespaces (the test's
   preferred mode), the full suite **passes on this branch** and passes on
   master (verified locally with `set -o pipefail`; exit code 0).
-- **Rebuild:** triggered a full container rebuild on this branch — after
-  it, `windows/` files are present, the branch tip is checked out, the
-  desktop is up on 6080 (HTTP 200), and the first-start marker correctly
-  prevents hooks from re-running.
+- **Rebuild:** full container rebuilds were triggered on this branch. After
+  the final rebuild, `windows/` files are present, the branch tip is
+  checked out, and the desktop answers on 6080 (HTTP 200). Note: one
+  rebuild produced an environment without the expected desktop components;
+  a subsequent rebuild passed the desktop smoke check. The initial failure's
+  root cause was not established.
 - **Stop/start:** a full stop + start cycle preserves the checkout, the
   `windows/` docs, and the running desktop.
 - **Links:** every URL in the added docs was fetched and returns 200 (the
   Roblox help-center pages return 403 to automated clients but are
   Roblox's canonical articles, confirmed via search results).
-- **Accuracy pass:** after initial review, several claims were corrected —
-  the VM recommendation was removed (Roblox's own error-codes page states
-  VMs and cloud computers are not supported), the Sober issue quote is
-  now attributed to a project contributor, the Tailscale and Sunshine
-  claims were reworded to match their sources, and the frame-rate section
-  now cites Roblox's official announcement. All replacement links were
-  re-verified (the Microsoft and Roblox docs return 200; the Roblox help
-  pages 403 to bots as noted).
+- **Accuracy pass (two rounds):** after review, several claims were corrected
+  — the VM recommendation was removed (Roblox's own error-codes page states
+  VMs and cloud computers are not supported), the Sober issue quote is now
+  attributed to a project contributor, the Tailscale and Sunshine claims
+  were reworded to match their sources, the frame-rate section now cites
+  Roblox's official announcement, and the power-plan, full-screen, and
+  optimization-script guidance was reworded to remove unmeasured
+  performance guarantees. All replacement links were re-verified (the
+  Microsoft and Roblox docs return 200; the Roblox help pages 403 to bots
+  as noted).
+- **Codespace suite caveat:** the Codespace smoke checks (startup, rebuild,
+  stop/start) passed; the Codespace idempotence suite failed at the Steam
+  assertion, with the same failure reproduced on master in the same
+  Codespace.
 
 No Windows host was available to this branch, so nothing Windows-specific
 was executed or verified — the documents state this explicitly and make

@@ -6,9 +6,10 @@ recommendation cites where it comes from. See [setup.md](setup.md) first.
 
 ## Windows-level tuning
 
-- **Power plan:** set the power plan to "High performance" (Settings →
-  System → Power) so the CPU does not down-clock mid-game; on laptops,
-  plug in — most laptops throttle the GPU on battery.
+- **Power plan:** compare the available power modes (Settings → System →
+  Power) while plugged in and use whichever gives the best measured result;
+  laptops in particular may throttle the GPU on battery. No specific plan
+  was measured by this branch.
 - **GPU driver:** keep the AMD/NVIDIA/Intel driver current from the
   vendor's own site (not just Windows Update). Roblox relies on your GPU's
   driver for DirectX rendering.
@@ -37,10 +38,9 @@ recommendation cites where it comes from. See [setup.md](setup.md) first.
   exposes a graphics quality slider and, on capable machines, manual
   graphics modes. For older/integrated-GPU machines, set graphics quality
   to the lowest 1–2 notches and measure.
-- **Full screen:** run the client full-screen rather than windowed — this
-  reduces compositing overhead on Windows (the desktop window manager
-  composites windowed games; full-screen exclusive bypasses it), but the
-  gain varies; measure on your machine.
+- **Full screen:** compare full-screen and windowed modes on your machine;
+  use whichever gives better measured responsiveness and stability. This
+  branch has not benchmarked either mode.
 
 ## What to avoid
 
@@ -53,8 +53,9 @@ recommendation cites where it comes from. See [setup.md](setup.md) first.
   Prefer the official setting; whether unlockers violate the Terms of Use
   is not for this doc to rule on.
 - **"Optimization" scripts from YouTube/reddit that edit the registry or
-  kill services wholesale:** most make no measurable difference for a
-  GPU-lightweight game like Roblox, and some break Windows updates.
+  kill services wholesale:** avoid unreviewed registry or service
+  modifications — unvetted changes can break Windows updates, and none
+  were reviewed by this branch.
 
 ## Frame rate
 
@@ -64,10 +65,9 @@ to up to 240 FPS on Windows (per Roblox's
 The in-experience Settings menu exposes a **Maximum Frame Rate** option —
 values Default/60/120/144/240 per Roblox's
 [announcement](https://devforum.roblox.com/t/introducing-the-maximum-framerate-setting/2995965).
-A cap at or below your display's refresh rate keeps the GPU/CPU from being
-pinned at 100% and reduces fan noise and heat; the announcement also notes
-that if your device cannot reach the selected maximum, you should not
-notice a difference.
+Try a lower Maximum Frame Rate setting and compare utilization,
+temperature, noise, and smoothness — no performance or thermal improvement
+was measured by this branch.
 
 ## Measuring
 
