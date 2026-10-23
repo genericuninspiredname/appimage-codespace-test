@@ -48,6 +48,12 @@ apt-get install -y -qq --no-install-recommends \
 if has_opt prism; then
   apt-get install -y -qq --no-install-recommends openjdk-21-jre || \
     apt-get install -y -qq --no-install-recommends default-jre
+  # Minecraft 26.3+ (the "renderpearl" renderer) requires an sRGB-capable
+  # GLX visual for its OpenGL backend; the VNC X server offers none, so the
+  # game falls back to Vulkan. Install Mesa's software Vulkan driver
+  # (lavapipe) so that fallback can actually initialize - without it, BOTH
+  # backends fail and the game exits with "No supported graphics backend".
+  apt-get install -y -qq --no-install-recommends mesa-vulkan-drivers
 fi
 
 
