@@ -271,8 +271,12 @@ requires a Microsoft account sign-in.
   version — modern versions need Java 21+, which the image provides as a
   system fallback; the launcher also downloads its own Java per instance).
 
-Minecraft renders on software rendering (llvmpipe supports the GL 3.2+
-core profile modern versions need); actual gameplay performance on the
+Minecraft 26.3+ (the "renderpearl" renderer) cannot use its OpenGL backend
+here: it requires an sRGB-capable GLX visual, which the VNC X server does not
+offer, so the game falls back to its Vulkan backend on lavapipe, the Mesa
+software Vulkan driver (installed with the `prism` option; without it both
+backends fail and the game exits with "No supported graphics backend").
+Rendering is CPU-rendered either way; actual gameplay performance on the
 2-core machine class was not measured in this repo. The launcher data
 (`~/.local/share/PrismLauncher` — instances, accounts, settings) is linked
 into the persistent desktop-data area and survives rebuilds.
